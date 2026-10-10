@@ -2,6 +2,87 @@
 
 All notable changes and verification outcomes are documented in this file.
 
+## [Milestone 2] - 2026-10-09: Fixed Surveillance Camera and ROS 2 Image Bridge
+
+### Added & Modified Files
+- `src/surveillance_sim/worlds/surveillance_world.sdf`:
+  - Added `<scene>` configuration (`ambient`: 0.8 0.8 0.8 1.0, `background`: 0.8 0.8 0.8 1.0).
+  - Added fixed surveillance camera model `surveillance_camera` at pose `-7.0 -7.0 2.3 0 0.25 0.7854`.
+  - Configured camera sensor parameters: 640×480 resolution, 30 FPS update rate, 1.05 rad horizontal FOV, `R8G8B8` format, clip range 0.1m - 50.0m.
+  - Set camera topic to `/camera/image_raw`.
+- `src/surveillance_sim/package.xml`:
+  - Added `ros_gz_image` and `ros_gz_bridge` runtime dependencies (`<exec_depend>`).
+- `src/surveillance_sim/launch/surveillance_world.launch.py`:
+  - Added `ros_gz_image/image_bridge` node configured for `/camera/image_raw`.
+  - Added `ros_gz_bridge/parameter_bridge` node for `/camera/camera_info`.
+  - Added launch argument `rqt` (default: `false`) to conditionally run `rqt_image_view` for stream monitoring.
+- `camera_snapshot.jpg`:
+  - Captured test image frame verifying proper scene rendering, lighting, shadows, and obstacle coverage.
+
+### Topic Inspection & Bridge Investigation
+- **Gazebo Transport Topics Produced**:
+  - Image Topic: `/camera/image_raw` (Message Type: `gz.msgs.Image`)
+  - Camera Info Topic: `/camera/camera_info` (Message Type: `gz.msgs.CameraInfo`)
+- **ROS 2 Bridged Topics**:
+  - `/camera/image_raw` (Message Type: `sensor_msgs/msg/Image`) via `ros_gz_image/image_bridge`
+  - `/camera/camera_info` (Message Type: `sensor_msgs/msg/CameraInfo`) via `ros_gz_bridge/parameter_bridge`
+- **Bridge Behavior Analysis**:
+  - `ros_gz_image/image_bridge` integrates natively with ROS 2 `image_transport`, reliably publishing `sensor_msgs/msg/Image` and associated compression transport plugins without requiring explicit type signatures.
+  - `ros_gz_bridge/parameter_bridge` handles metadata bridging (`gz.msgs.CameraInfo` -> `sensor_msgs/msg/CameraInfo`) with full camera calibration parameters.
+
+### Verification Results
+
+#### Test 1: Gazebo Topic Inspection
+- Verification Command: `gz topic -i -t /camera/image_raw`
+- Output:
+  ```text
+  Publishers [Address, Message Type]:
+    tcp://192.168.18.67:39739, gz.msgs.Image
+  Subscribers [Address, Message Type]:
+    tcp://192.168.18.67:44265, gz.msgs.Image
+  ```
+- Outcome: **PASSED**. Gazebo sensor pipeline rendered frames and published to Gazebo Transport.
+
+#### Test 2: ROS 2 Topic & Streaming Verification
+- Verification Commands:
+  - `ros2 topic info /camera/image_raw`
+    ```text
+    Type: sensor_msgs/msg/Image
+    Publisher count: 1
+    Subscription count: 0
+    ```
+  - `ros2 topic hz /camera/image_raw`
+    ```text
+    average rate: 25.117 Hz
+    ```
+  - `ros2 topic info /camera/camera_info`
+    ```text
+    Type: sensor_msgs/msg/CameraInfo
+    Publisher count: 1
+    ```
+- Outcome: **PASSED**. The image stream is published at the expected frame rate (~25-30 Hz).
+
+#### Test 3: Actual Image Content & Frame Verification
+- Script: Python subscriber with `rclpy` and `cv_bridge.CvBridge`
+- Output:
+  ```text
+  Captured Image Shape: (480, 640, 3), Type: uint8
+  Intensity: min=64, mean=176.09, max=231
+  Saved frame to camera_snapshot.jpg
+  ```
+- Visual Inspection:
+  - Image saved to `camera_snapshot.jpg` inspected and verified.
+  - Clearly renders the foreground crate `crate_sw`, central partition `partition_wall`, structural pillars `pillar_nw` and `pillar_ne`, surrounding perimeter walls, and shadows. Non-empty, non-black frame confirmed.
+- Outcome: **PASSED**.
+
+#### Test 4: RQt Image View Integration
+- Verification Command: `ros2 launch surveillance_sim surveillance_world.launch.py headless:=true rqt:=true`
+- Output:
+  - `rqt_image_view` started successfully with PID and subscribed to `/camera/image_raw`.
+- Outcome: **PASSED**.
+
+---
+
 ## [Milestone 1] - 2026-10-09: Minimal Gazebo Harmonic World and ROS 2 Jazzy Integration
 
 ### Added Files
@@ -46,65 +127,16 @@ All notable changes and verification outcomes are documented in this file.
   ros2 launch surveillance_sim surveillance_world.launch.py headless:=true
   ```
 - Verification Commands & Results:
-  - `gz topic -l` discovered the following active simulation topics:
-    ```text
-    /clock
-    /gazebo/resource_paths
-    /stats
-    /world/surveillance_world/clock
-    /world/surveillance_world/dynamic_pose/info
-    /world/surveillance_world/pose/info
-    /world/surveillance_world/scene/deletion
-    /world/surveillance_world/scene/info
-    /world/surveillance_world/state
-    /world/surveillance_world/stats
-    /world/surveillance_world/light_config
-    /world/surveillance_world/material_color
-    ```
-  - `gz topic -e -t /stats -n 1` verified simulation stepping and real-time factor:
-    ```text
-    sim_time {
-      sec: 6
-      nsec: 505000000
-    }
-    real_time {
-      sec: 8
-      nsec: 197695042
-    }
-    iterations: 6505
-    real_time_factor: 1.0009198453378656
-    step_size {
-      nsec: 1000000
-    }
-    ```
-- Outcome: **PASSED**. World `surveillance_world` loaded cleanly with real-time physics stepping.
+  - `gz topic -l` discovered active simulation topics (`/stats`, `/world/surveillance_world/*`).
+  - `gz topic -e -t /stats -n 1` verified simulation stepping (`iterations: 6505`, `real_time_factor: 1.0009`).
+- Outcome: **PASSED**.
 
 #### Test 2: Paused Mode Verification
-- Command:
-  ```bash
-  ros2 launch surveillance_sim surveillance_world.launch.py headless:=true paused:=true
-  ```
-- Verification Commands & Results:
-  - Echoing `/world/surveillance_world/stats` confirmed:
-    ```text
-    paused: true
-    ```
-- Outcome: **PASSED**. Omitting `-r` started the simulation in paused state as expected.
+- Command: `ros2 launch surveillance_sim surveillance_world.launch.py headless:=true paused:=true`
+- Verification Commands & Results: Confirmed `/world/surveillance_world/stats` reported `paused: true`.
+- Outcome: **PASSED**.
 
 #### Test 3: GUI Mode Launch Verification
-- Command:
-  ```bash
-  ros2 launch surveillance_sim surveillance_world.launch.py headless:=false
-  ```
-- Verification Commands & Results:
-  - Inspected active processes:
-    ```text
-    ruby /opt/ros/jazzy/opt/gz_tools_vendor/bin/gz sim -r .../surveillance_world.sdf --force-version 8
-    gz sim -r .../surveillance_world.sdf
-    gz sim server
-    gz sim gui
-    ```
-- Outcome: **PASSED**. Both Gazebo Sim server and GUI components initialized and executed cleanly.
-
-#### Verification Failure Note & Resolution
-- During an initial automated Python subprocess test, `ros2 launch` failed to resolve `surveillance_sim` because Python was invoked directly without `install/setup.bash` sourced in the calling subshell, leaving `AMENT_PREFIX_PATH` set only to `/opt/ros/jazzy`. Sourcing the workspace overlay `install/setup.bash` prior to launching resolved this as expected.
+- Command: `ros2 launch surveillance_sim surveillance_world.launch.py headless:=false`
+- Verification Commands & Results: Both `gz sim server` and `gz sim gui` processes initialized cleanly.
+- Outcome: **PASSED**.

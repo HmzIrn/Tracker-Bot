@@ -1,0 +1,4 @@
+Invoking command in '/home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy /usr/bin/cmake --build /home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim -- -j4 -l4
+Invoked command in '/home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy /usr/bin/cmake --build /home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim -- -j4 -l4
+Invoking command in '/home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy /usr/bin/cmake --install /home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim
+Invoked command in '/home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy /usr/bin/cmake --install /home/hsa/Public/Sem-5/IOT/Project/ros2_ws/build/surveillance_sim

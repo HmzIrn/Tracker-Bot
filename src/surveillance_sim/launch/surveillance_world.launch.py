@@ -1,8 +1,10 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -36,6 +38,29 @@ def generate_launch_description():
         'surveillance_world.sdf'
     ])
 
+    image_bridge = Node(
+        package='ros_gz_image',
+        executable='image_bridge',
+        name='image_bridge',
+        arguments=['/camera/image_raw'],
+        output='screen',
+    )
+
+    camera_info_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='camera_info_bridge',
+        arguments=['/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo'],
+        output='screen',
+    )
+
+    rqt_image_view = Node(
+        package='rqt_image_view',
+        executable='rqt_image_view',
+        arguments=['/camera/image_raw'],
+        condition=IfCondition(LaunchConfiguration('rqt')),
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
@@ -52,5 +77,13 @@ def generate_launch_description():
             default_value='false',
             description='Start simulation paused. If false, passes -r to run on start.'
         ),
+        DeclareLaunchArgument(
+            'rqt',
+            default_value='false',
+            description='Launch rqt_image_view to view the camera feed.'
+        ),
         OpaqueFunction(function=launch_setup),
+        image_bridge,
+        camera_info_bridge,
+        rqt_image_view,
     ])
