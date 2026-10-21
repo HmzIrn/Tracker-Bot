@@ -1,7 +1,96 @@
-
 {
   "version": "2.0.0",
   "tasks": [
+    {
+      "label": "ROS 2: Launch Surveillance Simulation (GUI)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ROS 2: Launch Surveillance Simulation with Camera Preview (GUI + RQt)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py rqt:=true"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py rqt:=true"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Gazebo: Open Surveillance World (Standalone GUI)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && gz sim -r src/surveillance_sim/worlds/surveillance_world.sdf"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && gz sim -r src/surveillance_sim/worlds/surveillance_world.sdf"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
     {
       "label": "ROS 2: Build workspace",
       "type": "shell",
@@ -10,19 +99,25 @@
         "-lc",
         "source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
       ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
+        ]
+      },
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": []
-    },
-    {
-      "label": "Gazebo: Open shapes demo",
-      "type": "shell",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "source /opt/ros/jazzy/setup.bash && gz sim shapes.sdf"
-      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
       "problemMatcher": []
     },
     {
@@ -33,6 +128,18 @@
         "-lc",
         "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 topic list"
       ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 topic list"
+        ]
+      },
       "options": {
         "cwd": "${workspaceFolder}"
       },

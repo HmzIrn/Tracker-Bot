@@ -341,5 +341,91 @@
       </link>
     </model>
 
+    <!-- Minimal Animated Human Actor (Idle, Walk, Run States) -->
+    <actor name="human_subject">
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="idle">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/stand.dae</filename>
+        <scale>1.0</scale>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <animation name="walk">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <scale>1.0</scale>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <animation name="run">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/run.dae</filename>
+        <scale>1.0</scale>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <delay_start>0.000000</delay_start>
+        <auto_start>true</auto_start>
+        <!-- State 1: IDLE (Standing in surveillance camera view, observing room) -->
+        <trajectory id="0" type="idle">
+          <waypoint>
+            <time>0.0</time>
+            <pose>0.0 0.0 1.0 0 0 0.7854</pose>
+          </waypoint>
+          <waypoint>
+            <time>4.0</time>
+            <pose>0.0 0.0 1.0 0 0 0.7854</pose>
+          </waypoint>
+        </trajectory>
+        <!-- State 2: WALK (Walking along midground corridor at ~1.0 m/s) -->
+        <trajectory id="1" type="walk">
+          <waypoint>
+            <time>4.0</time>
+            <pose>0.0 0.0 1.0 0 0 0.7854</pose>
+          </waypoint>
+          <waypoint>
+            <time>7.5</time>
+            <pose>2.5 2.5 1.0 0 0 0.7854</pose>
+          </waypoint>
+          <waypoint>
+            <time>8.5</time>
+            <pose>2.5 2.5 1.0 0 0 2.356</pose>
+          </waypoint>
+          <waypoint>
+            <time>11.0</time>
+            <pose>0.5 4.5 1.0 0 0 2.356</pose>
+          </waypoint>
+          <waypoint>
+            <time>12.0</time>
+            <pose>0.5 4.5 1.0 0 0 -2.356</pose>
+          </waypoint>
+        </trajectory>
+        <!-- State 3: RUN (Running across the room at ~2.5 m/s back to origin) -->
+        <trajectory id="2" type="run">
+          <waypoint>
+            <time>12.0</time>
+            <pose>0.5 4.5 1.0 0 0 -2.356</pose>
+          </waypoint>
+          <waypoint>
+            <time>14.5</time>
+            <pose>-2.5 1.5 1.0 0 0 -2.356</pose>
+          </waypoint>
+          <waypoint>
+            <time>15.5</time>
+            <pose>-2.5 1.5 1.0 0 0 -0.5236</pose>
+          </waypoint>
+          <waypoint>
+            <time>18.0</time>
+            <pose>0.0 0.0 1.0 0 0 -0.5236</pose>
+          </waypoint>
+          <waypoint>
+            <time>19.0</time>
+            <pose>0.0 0.0 1.0 0 0 0.7854</pose>
+          </waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+
   </world>
 </sdf>
