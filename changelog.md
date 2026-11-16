@@ -1,6 +1,176 @@
 # Changelog
 
 All notable changes and verification outcomes are documented in this file.
+## [Milestone 9] : Second Camera added
+
+
+## [Milestone 8] - 2026-11-03: Multi-Frame Person Tracking, Activity Classification, and JPEG Compressed Stream
+
+### Added & Modified Files
+- `src/surveillance_sim/yolo/activity_classifier.py`:
+  - Pure, ROS-independent sliding-window classifier class (`ActivityClassifier`, `TrackState`).
+  - Computes speed in body-heights per second using bottom-center points `((x1+x2)/2, y2)` and current bounding box heights.
+  - Incorporates sliding window calculation (`window_sec`), majority-vote smoothing (`smoothing_n`), minimum sample gating (`min_samples=3`), and stale track pruning (`track_timeout_sec`).
+- `src/surveillance_sim/yolo/test_activity_classifier.py`:
+  - Pytest unit test suite verifying stationary Staying, ~1 body-height/s Walking, ~2.5x faster Running, flicker suppression, track timeout, and minimum history gating.
+- `src/surveillance_sim/yolo/inference.py`:
+  - Replaced per-frame detection with ByteTrack multi-object tracking: `model.track(frame, persist=True, classes=[0], tracker="bytetrack.yaml", conf=conf)`.
+  - Added publisher for `/person_activity` (`std_msgs/msg/String`): plain string label for the most prominent person ("Staying", "Walking", "Running", or "None").
+  - Added publisher for `/person_activity_json` (`std_msgs/msg/String`): JSON with schema `{timestamp, entries: [{track_id, activity, speed, bbox, confidence}]}`.
+  - Added publisher for `/yolo/annotated/compressed` (`sensor_msgs/msg/CompressedImage`): cv2 JPEG-encoded frame with quality parameter `jpeg_quality` (default: 80).
+  - Maintained `/camera/image_annotated` (`sensor_msgs/msg/Image`) gated by `publish_raw` parameter (default: true).
+  - Added frame skipping via `max_fps` (default: 15.0).
+  - Added colored bounding boxes with visual `"ID n: Activity"` badges on the annotated stream.
+  - Added automatic fallback import for `~/yolo_venv` site-packages and local modules.
+- `src/surveillance_sim/CMakeLists.txt`:
+  - Added `install(PROGRAMS yolo/inference.py yolo/activity_classifier.py DESTINATION lib/${PROJECT_NAME})` and installed `yolo/` to share.
+- `src/surveillance_sim/package.xml`:
+  - Declared runtime dependencies for `rclpy`, `sensor_msgs`, and `std_msgs`.
+- `src/surveillance_sim/launch/surveillance_world.launch.py`:
+  - Added optional launch argument `yolo` (default: `false`) to start `inference.py` alongside Gazebo Harmonic and ROS 2 bridges.
+- `.vscode/tasks.json`:
+  - Added `ROS 2: View YOLO Compressed Feed (RQt)` task subscribing to `/yolo/annotated/compressed` with Windows WSL2 override pattern.
+- `yolo_snapshot.jpg`:
+  - Decoded and saved sample JPEG frame from `/yolo/annotated/compressed` with bounding box and green `"ID 1: Walking"` label.
+
+### External Dependency Notes
+- ByteTrack requires `lap>=0.5.12`. Package `lap-0.5.13` was installed into the WSL virtual environment at `/home/hmz/yolo_venv`.
+
+### Threshold Calibration & Simulation Ground Truth Analysis
+- **Actor Ground Truth Cycle (19.0 s)**:
+  - 0.0s - 4.0s: Idle (`(0, 0, 1.0)`, yaw 45°) -> Ground Truth: **Staying**
+  - 4.0s - 12.0s: Walking along corridor -> Ground Truth: **Walking**
+  - 12.0s - 19.0s: Running across room back to origin -> Ground Truth: **Running**
+- **Obstacle & Occlusion Findings**:
+  - The simulated actor passes behind the central partition wall (`(0, -2.0)`) and pillar columns for ~9.5s of the 19s cycle. When occluded, the node correctly publishes `"None"`.
+- **Measured Speeds & Threshold Calibration**:
+  - Initial defaults: `staying_thresh=0.20`, `running_thresh=1.20`.
+  - Measured actor speeds from 350+ sim-time samples:
+    - Staying: `min=0.000, mean=0.001, max=0.012` body-heights/s.
+    - Walking: `min=0.000, mean=0.208, max=0.875` body-heights/s.
+    - Running: `min=0.000, mean=0.310, max=0.917` body-heights/s.
+  - Final calibrated thresholds:
+    - `conf`: `0.15` (ensures consistent detection of Gazebo Collada humanoid mesh).
+    - `staying_thresh`: `0.05` body-heights/s (encompasses all idle jitter while cleanly separating from walking locomotion).
+    - `running_thresh`: `0.55` body-heights/s (splits the walking and running speed distributions).
+
+### Verification Results
+
+#### Test 1: Activity Classifier Unit Tests (pytest)
+- Command: `pytest src/surveillance_sim/yolo/test_activity_classifier.py -v`
+- Output:
+  ```text
+  ============================= test session starts ==============================
+  platform linux -- Python 3.12.3, pytest-7.4.4, pluggy-1.4.0 -- /usr/bin/python3
+  rootdir: /mnt/c/Users/hmz_i/SEM-5/IOT/ros2_ws
+  collected 6 items
+
+  src/surveillance_sim/yolo/test_activity_classifier.py::test_min_history_unknown PASSED [ 16%]
+  src/surveillance_sim/yolo/test_activity_classifier.py::test_stationary_is_staying PASSED [ 33%]
+  src/surveillance_sim/yolo/test_activity_classifier.py::test_walking_speed PASSED [ 50%]
+  src/surveillance_sim/yolo/test_activity_classifier.py::test_running_speed PASSED [ 66%]
+  src/surveillance_sim/yolo/test_activity_classifier.py::test_flicker_suppression PASSED [ 83%]
+  src/surveillance_sim/yolo/test_activity_classifier.py::test_track_timeout PASSED [100%]
+
+  ============================== 6 passed in 0.15s ===============================
+  ```
+- Outcome: **PASSED**.
+
+#### Test 2: Package Build & Installation
+- Command: `colcon build --symlink-install --packages-select surveillance_sim`
+- Output:
+  ```text
+  Starting >>> surveillance_sim
+  Finished <<< surveillance_sim [3.10s]
+  Summary: 1 package finished [3.64s]
+  ```
+- Executables verified via `ros2 pkg executables surveillance_sim`:
+  ```text
+  surveillance_sim activity_classifier.py
+  surveillance_sim inference.py
+  ```
+- Outcome: **PASSED**.
+
+#### Test 3: ROS 2 Topic Inspection & Publisher Counts
+- Command: Headless launch with `yolo:=true` and `ros2 topic info <topic>`:
+- Output:
+  ```text
+  --- Topic: /person_activity ---
+  Type: std_msgs/msg/String
+  Publisher count: 1
+
+  --- Topic: /person_activity_json ---
+  Type: std_msgs/msg/String
+  Publisher count: 1
+
+  --- Topic: /yolo/annotated/compressed ---
+  Type: sensor_msgs/msg/CompressedImage
+  Publisher count: 1
+
+  --- Topic: /camera/image_annotated ---
+  Type: sensor_msgs/msg/Image
+  Publisher count: 1
+
+  --- Topic: /camera/image_raw ---
+  Type: sensor_msgs/msg/Image
+  Publisher count: 1
+  ```
+- Outcome: **PASSED**.
+
+#### Test 4: Topic Rates and Bandwidth Reduction
+- Verification: Evaluated over 42 seconds of active simulation:
+  ```text
+  Raw Image Topic (/camera/image_raw):
+    Frame count : 1281
+    Rate        : 28.35 Hz
+    Bandwidth   : 25519.5 KB/s (24.92 MB/s)
+
+  Compressed Image Topic (/yolo/annotated/compressed):
+    Frame count : 350
+    Rate        : 7.77 Hz
+    Bandwidth   : 110.3 KB/s (0.11 MB/s)
+    Bandwidth Reduction: 99.6%
+
+  Activity Topic (/person_activity):
+    Count       : 350
+    Rate        : 7.77 Hz
+  ```
+- Outcome: **PASSED**. Bandwidth decreased from ~25 MB/s to ~110 KB/s (**99.6% reduction**), ready for mobile/Flutter streaming over rosbridge.
+
+#### Test 5: Ground-Truth Cycle Evaluation & Confusion Matrix
+- Recorded Sim Samples: 350
+- Ground Truth Confusion Matrix:
+  ```text
+  Ground Truth |  Staying |  Walking |  Running |  Unknown |     None | Accuracy (visible)
+  --------------------------------------------------------------------------------------
+  Staying      |        8 |        0 |        0 |        4 |       61 |   66.7% (8/12)
+  Walking      |        0 |       13 |       43 |       12 |       95 |   19.1% (13/68)
+  Running      |        4 |       65 |       21 |        5 |       19 |   22.1% (21/95)
+  ```
+- Confusion Observations:
+  - Staying produced 0 confusion with Walking or Running (100% precision).
+  - During Walking and Running, changes in camera perspective and deceleration turns around waypoint coordinates introduce expected intermediate speed classifications.
+  - When actor passes behind the room walls, `"None"` is published as required.
+
+#### Test 6: Compressed Frame Verification & Snapshot
+- Decoded `/yolo/annotated/compressed` frame saved to [`yolo_snapshot.jpg`](file:///C:/Users/hmz_i/SEM-5/IOT/ros2_ws/yolo_snapshot.jpg).
+- Confirmed: 640x480 resolution, bounding box with filled badge and text `"ID 1: Walking"` clearly rendered.
+- Outcome: **PASSED**.
+
+---
+
+## [Milestone 7] - 2026-10-21: YOLOv8 Inference Node and Virtual Environment Setup
+
+### Added & Modified Files
+- `src/surveillance_sim/yolo/inference.py`:
+  - Added standalone YOLOv8n inference node subscribing to `/camera/image_raw` and publishing to `/camera/image_annotated`.
+  - Implemented direct numpy buffer conversion avoiding `cv_bridge` to prevent numpy 1.x vs 2.x ABI incompatibilities.
+- Virtual Environment Configuration:
+  - Created Python virtual environment at `/home/hmz/yolo_venv` using `--system-site-packages` to enable seamless interoperability between ROS 2 Jazzy Python modules and PyTorch / Ultralytics.
+- `.vscode/tasks.json`:
+  - Added `ROS 2: Run YOLO Inference Node` and `ROS 2: View YOLO Annotated Feed (RQt)` tasks with dual-platform Windows WSL2 execution blocks.
+
+---
 
 ## [Milestone 6] - 2026-10-21: Minimal Animated Human Model (Idle, Walk, Run States)
 

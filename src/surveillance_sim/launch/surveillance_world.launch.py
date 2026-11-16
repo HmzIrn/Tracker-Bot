@@ -42,7 +42,7 @@ def generate_launch_description():
         package='ros_gz_image',
         executable='image_bridge',
         name='image_bridge',
-        arguments=['/camera/image_raw'],
+        arguments=['/camera/image_raw', '/camera2/image_raw'],
         output='screen',
     )
 
@@ -50,7 +50,10 @@ def generate_launch_description():
         package='ros_gz_bridge',
         executable='parameter_bridge',
         name='camera_info_bridge',
-        arguments=['/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo'],
+        arguments=[
+            '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            '/camera2/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+        ],
         output='screen',
     )
 
@@ -59,6 +62,14 @@ def generate_launch_description():
         executable='rqt_image_view',
         arguments=['/camera/image_raw'],
         condition=IfCondition(LaunchConfiguration('rqt')),
+    )
+
+    yolo_inference = Node(
+        package='surveillance_sim',
+        executable='inference.py',
+        name='yolo_inference',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('yolo')),
     )
 
     return LaunchDescription([
@@ -82,8 +93,14 @@ def generate_launch_description():
             default_value='false',
             description='Launch rqt_image_view to view the camera feed.'
         ),
+        DeclareLaunchArgument(
+            'yolo',
+            default_value='false',
+            description='Start YOLO person tracking and activity classification node.'
+        ),
         OpaqueFunction(function=launch_setup),
         image_bridge,
         camera_info_bridge,
         rqt_image_view,
+        yolo_inference,
     ])

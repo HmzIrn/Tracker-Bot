@@ -144,6 +144,96 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "ROS 2: Run YOLO Inference Node",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ROS 2: View YOLO Annotated Feed (RQt)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /camera/image_annotated"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /camera/image_annotated"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ROS 2: View YOLO Compressed Feed (RQt)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /yolo/annotated/compressed"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /yolo/annotated/compressed"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
     }
   ]
 }

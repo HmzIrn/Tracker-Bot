@@ -30,21 +30,27 @@ ros2_ws/
 ├── changelog.md                                 # Chronological log of all modifications and test results
 ├── context.md                                   # Environment details, architecture, and package context
 ├── camera_snapshot.jpg                          # Verification snapshot captured directly from camera stream
+├── yolo_snapshot.jpg                            # Verification snapshot of compressed annotated stream
 └── src/
-    └── surveillance_sim/                        # Simulation package
-        ├── CMakeLists.txt                       # ament_cmake build script exporting share resources
-        ├── package.xml                          # Package manifest specifying ros_gz dependencies
+    └── surveillance_sim/                        # Simulation and perception package
+        ├── CMakeLists.txt                       # ament_cmake build script exporting share resources and programs
+        ├── package.xml                          # Package manifest specifying ros_gz, rclpy, std_msgs, sensor_msgs
         ├── launch/
-        │   └── surveillance_world.launch.py     # Launch file starting Gazebo + image bridge + rqt
+        │   └── surveillance_world.launch.py     # Launch file starting Gazebo + image bridge + rqt + optional yolo
         ├── worlds/
         │   └── surveillance_world.sdf           # SDF 1.9 world description with camera and animated human
-        └── models/                              # Directory for custom models
-            └── human/                           # Minimal animated human actor model
-                ├── model.config                 # Model metadata
-                └── meshes/                      # Low-poly skeletal animation meshes
-                    ├── stand.dae                # Idle animation
-                    ├── walk.dae                 # Walking animation
-                    └── run.dae                  # Running animation
+        ├── models/                              # Directory for custom models
+        │   └── human/                           # Minimal animated human actor model
+        │       ├── model.config                 # Model metadata
+        │       └── meshes/                      # Low-poly skeletal animation meshes
+        │           ├── stand.dae                # Idle animation
+        │           ├── walk.dae                 # Walking animation
+        │           └── run.dae                  # Running animation
+        └── yolo/                                # Perception & activity classification module
+            ├── __init__.py                      # Python package marker
+            ├── activity_classifier.py           # Pure ROS-independent sliding-window classifier
+            ├── inference.py                     # ROS 2 ByteTrack tracking & streaming node
+            └── test_activity_classifier.py      # Pytest test suite for classifier
 ```
 
 ### World Design (`surveillance_world.sdf`)
@@ -104,11 +110,88 @@ ros2_ws/
   - `headless`: `true` or `false` (default: `false`). When `true`, passes `-s` to Gazebo.
   - `paused`: `true` or `false` (default: `false`). When `false`, passes `-r` to Gazebo.
   - `rqt`: `true` or `false` (default: `false`). Launches `rqt_image_view` viewing `/camera/image_raw`.
+  - `yolo`: `true` or `false` (default: `false`). Starts the YOLO tracking and activity classification node (`inference.py`).
+
+### YOLO Perception & Activity Classification Architecture
+The perception pipeline (`src/surveillance_sim/yolo/`) operates on camera frames streamed over `/camera/image_raw`:
+- **Tracking Engine**: ByteTrack multi-object tracker integrated via `ultralytics` (`model.track(frame, persist=True, classes=[0], tracker="bytetrack.yaml")`), assigning persistent IDs across frames. Tracking assignment linear algebra is powered by `lap-0.5.13` inside `/home/hmz/yolo_venv`.
+- **Pure Activity Classifier (`ActivityClassifier`)**:
+  - Independent unit-testable class tracking the bottom-center point `((x1+x2)/2, y2)` and height $h$ for each track ID.
+  - Timestamps are extracted directly from `msg.header.stamp` (simulation time), ensuring invariance to wall-clock inference latency or frame drops.
+  - Calculates speed in **body-heights per second**: $v = \frac{\Delta \text{pixels} / h}{\Delta t}$ over a sliding time window (`window_sec`).
+  - Classifies states into:
+    - `Staying`: $v < \text{staying\_thresh}$
+    - `Walking`: $\text{staying\_thresh} \le v < \text{running\_thresh}$
+    - `Running`: $v \ge \text{running\_thresh}$
+    - `Unknown`: Insufficient track history (< `min_samples=3`).
+    - `None`: No human detected in field of view (e.g., when occluded by walls/pillars).
+  - Majority-vote smoothing over the last $N$ predictions (`smoothing_n`) eliminates frame-to-frame gait cycle oscillation and jitter.
+  - Stale tracks are pruned automatically after `track_timeout_sec`.
+- **CV Bridge Avoidance**: Image conversions are implemented directly using raw `numpy` buffer slicing and OpenCV (`cv2`) without `cv_bridge` to prevent numpy 1.x vs 2.x ABI crashes.
+- **Compressed Streaming**: Annotated frames with bounding boxes and `"ID n: Activity"` badges are JPEG-encoded via `cv2.imencode` to `/yolo/annotated/compressed`, achieving a **99.6% bandwidth reduction** (from ~24.9 MB/s raw to ~0.11 MB/s compressed) suitable for mobile/web apps over rosbridge.
+
+### ROS 2 Topics
+| Topic | Message Type | Direction | Description |
+| :--- | :--- | :--- | :--- |
+| `/camera/image_raw` | `sensor_msgs/msg/Image` | Subscribed | Raw RGB8 640x480 30 FPS camera feed from Gazebo bridge |
+| `/camera/camera_info` | `sensor_msgs/msg/CameraInfo` | Bridged | Camera intrinsic calibration info |
+| `/camera/image_annotated` | `sensor_msgs/msg/Image` | Published | Raw BGR8 annotated frame (gated by `publish_raw` parameter) |
+| `/yolo/annotated/compressed`| `sensor_msgs/msg/CompressedImage` | Published | JPEG-compressed annotated frame for web/Flutter streaming |
+| `/person_activity` | `std_msgs/msg/String` | Published | Prominent person activity label (`Walking`, `Running`, `Staying`, `None`) |
+| `/person_activity_json` | `std_msgs/msg/String` | Published | Structured JSON payload with timestamp and per-person telemetry |
+
+### Node Parameters (`inference.py`)
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `model` | string | `yolov8n.pt` | YOLO model weights name or path |
+| `conf` | double | `0.15` | Detection confidence threshold (tuned for Gazebo Collada meshes) |
+| `window_sec` | double | `1.0` | Sliding window duration for speed estimation (seconds) |
+| `staying_thresh` | double | `0.05` | Threshold between Staying and Walking (body-heights/s) |
+| `running_thresh` | double | `0.55` | Threshold between Walking and Running (body-heights/s) |
+| `smoothing_n` | int | `5` | Majority-vote smoothing window size (history length) |
+| `track_timeout_sec` | double | `2.0` | Inactivity duration before dropping lost tracks (seconds) |
+| `jpeg_quality` | int | `80` | JPEG compression quality (1–100) |
+| `publish_raw` | bool | `true` | Toggle publishing raw `/camera/image_annotated` |
+| `max_fps` | double | `15.0` | Maximum inference rate throttle (FPS) |
+
+### How to Run & Verify
+
+1. **Launch Simulation with Perception Pipeline**:
+   ```bash
+   ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true
+   ```
+2. **Launch Simulation Headless & Run Perception Node Manually**:
+   ```bash
+   # Terminal 1: Simulation
+   ros2 launch surveillance_sim surveillance_world.launch.py headless:=true
+
+   # Terminal 2: YOLO Node
+   ros2 run surveillance_sim inference.py
+   ```
+3. **Run Unit Tests (Pure Activity Classifier)**:
+   ```bash
+   pytest src/surveillance_sim/yolo/test_activity_classifier.py -v
+   ```
+4. **Inspect Topics & Streams**:
+   ```bash
+   # Echo plain badge topic
+   ros2 topic echo /person_activity
+
+   # Echo JSON telemetry
+   ros2 topic echo /person_activity_json
+
+   # Check compressed frame bandwidth & rate
+   ros2 topic hz /yolo/annotated/compressed
+   ros2 topic bw /yolo/annotated/compressed
+   ```
 
 ## VS Code Task Automation (`.vscode/tasks.json`)
 The workspace includes dual-platform automated tasks to execute common workflows directly from VS Code (`Terminal -> Run Task...` or `Ctrl+Shift+P -> Tasks: Run Task`). Each task defines a native Linux execution block (when connected via VS Code WSL Remote) and a `"windows"` configuration block using `wsl -d Ubuntu-24.04 --cd "${workspaceFolder}"` for native Windows execution:
 - **`ROS 2: Launch Surveillance Simulation (GUI)`**: Builds if not yet built, sources the workspace, and runs `ros2 launch surveillance_sim surveillance_world.launch.py`, opening the Gazebo GUI window with the full simulation and ROS 2 bridges active via WSLg.
 - **`ROS 2: Launch Surveillance Simulation with Camera Preview (GUI + RQt)`**: Launches the simulation with both Gazebo GUI and `rqt_image_view` displaying the camera feed.
+- **`ROS 2: Run YOLO Inference Node`**: Runs `inference.py` using the WSL virtual environment `/home/hmz/yolo_venv`.
+- **`ROS 2: View YOLO Compressed Feed (RQt)`**: Launches `rqt_image_view` subscribed to `/yolo/annotated/compressed`.
+- **`ROS 2: View YOLO Annotated Feed (RQt)`**: Launches `rqt_image_view` subscribed to `/camera/image_annotated`.
 - **`Gazebo: Open Surveillance World (Standalone GUI)`**: Directly opens `surveillance_world.sdf` in Gazebo Sim GUI without ROS 2 nodes.
 - **`ROS 2: Build workspace`**: Runs `colcon build --symlink-install` (configured as default build task).
 - **`ROS 2: List active topics`**: Inspects all active ROS 2 topics.

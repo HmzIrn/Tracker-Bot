@@ -11,7 +11,16 @@ install(DIRECTORY
   launch
   worlds
   models
+  yolo
+  config
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  yolo/inference.py
+  yolo/activity_classifier.py
+  yolo/ground_projection.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()
