@@ -7,7 +7,7 @@ camera1:
 
 camera2:
   topic: "/camera2/image_raw"
-  pose: [0.0 7.0 2.3 0 0.2 -1.57]
+  pose: [0.0, 7.0, 2.3, 0.0, 0.2, -1.57]
   width: 640
   height: 480
   hfov: 1.05

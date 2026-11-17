@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes and verification outcomes are documented in this file.
+
+## [Milestone 10] - 2026-11-17: Repair Simulation-to-YOLO Launch and Feed
+
+### Fixed
+- `src/surveillance_sim/yolo/inference.py` was checked out with CRLF line endings, so WSL executed its shebang as `python3\r` and exited with code 127. Added `.gitattributes` to keep Python files LF across Windows/WSL checkouts.
+- Capped inference at 2 wall-clock FPS (previously 15 simulation-time FPS). Running two CPU YOLO passes per step at the old rate saturated CPU and prevented annotated frames from being delivered reliably.
+- Aligned camera 2's projection pose with `surveillance_world.sdf` and corrected the malformed pose list in `config/cameras.yaml`.
+- RQt cannot display `/yolo/annotated/compressed` as a standard `sensor_msgs/Image` topic. Replaced that viewer task with `/camera/image_annotated` and added a one-step simulation + YOLO launch task.
+
+### Verification
+- `colcon build --symlink-install --packages-select surveillance_sim`: **passed**.
+- `pytest -q src/surveillance_sim/yolo/test_activity_classifier.py src/surveillance_sim/yolo/test_ground_projection.py`: **13 passed**.
+- `python3 -m json.tool .vscode/tasks.json`: **passed**.
+- Headless Gazebo + YOLO launch started successfully in WSL; `/camera/image_annotated` published at approximately **2 Hz**, and `/person_activity` produced `Walking`. The RQt viewer process also started on `/camera/image_annotated`.
+- PyTorch reported that the installed NVIDIA driver is too old for its CUDA build; inference remains configured for CPU and the warning is non-fatal.
+
 ## [Milestone 9] : Second Camera added
 
 

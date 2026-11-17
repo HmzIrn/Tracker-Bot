@@ -62,6 +62,36 @@
       "problemMatcher": []
     },
     {
+      "label": "ROS 2: Launch Surveillance Simulation with YOLO",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "Gazebo: Open Surveillance World (Standalone GUI)",
       "type": "shell",
       "command": "bash",
@@ -176,7 +206,7 @@
       "problemMatcher": []
     },
     {
-      "label": "ROS 2: View YOLO Annotated Feed (RQt)",
+      "label": "ROS 2: View YOLO Feed (RQt)",
       "type": "shell",
       "command": "bash",
       "args": [
@@ -193,36 +223,6 @@
           "bash",
           "-lc",
           "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /camera/image_annotated"
-        ]
-      },
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "ROS 2: View YOLO Compressed Feed (RQt)",
-      "type": "shell",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /yolo/annotated/compressed"
-      ],
-      "windows": {
-        "command": "wsl",
-        "args": [
-          "-d",
-          "Ubuntu-24.04",
-          "--cd",
-          "${workspaceFolder}",
-          "bash",
-          "-lc",
-          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /yolo/annotated/compressed"
         ]
       },
       "options": {

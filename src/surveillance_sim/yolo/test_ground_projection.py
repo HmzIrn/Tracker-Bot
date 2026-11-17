@@ -41,15 +41,14 @@ def test_camera1_center_projection():
 
 
 def test_camera2_center_projection():
-    """Verify camera 2 center ray hits world coordinate (+0.631, +0.631)."""
-    pose2 = [7.0, 7.0, 2.3, 0.0, 0.25, -2.356]
+    """Verify camera 2 center ray follows its simulated north-side mounting pose."""
+    pose2 = [0.0, 7.0, 2.3, 0.0, 0.2, -1.57]
     res = project_pixel_to_ground(320.0, 240.0, pose2, width=640, height=480, hfov=1.05)
     assert res is not None
     x, y = res
 
-    expected_offset = (2.3 / math.tan(0.25)) * math.cos(math.pi / 4.0)
-    expected_x = 7.0 - expected_offset
-    expected_y = 7.0 - expected_offset
+    expected_x = 0.0
+    expected_y = 7.0 - (2.3 / math.tan(0.2))
 
     assert abs(x - expected_x) < 0.02
     assert abs(y - expected_y) < 0.02

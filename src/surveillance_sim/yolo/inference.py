@@ -41,7 +41,7 @@ except ImportError:
     from ultralytics import YOLO
 
 from activity_classifier import ActivityClassifier
-from ground_projection import GroundProjector, project_pixel_to_ground
+from ground_projection import GroundProjector
 
 import rclpy
 from rclpy.node import Node
@@ -58,7 +58,7 @@ DEFAULT_CAMERAS = {
         "hfov": 1.05,
     },
     "camera2": {
-        "pose": [7.0, 7.0, 2.3, 0.0, 0.25, -2.356],
+        "pose": [0.0, 7.0, 2.3, 0.0, 0.2, -1.57],
         "width": 640,
         "height": 480,
         "hfov": 1.05,
@@ -89,7 +89,7 @@ class MultiCameraTrackerNode(Node):
         self.declare_parameter("tracking_dist_gate", 1.5)
         self.declare_parameter("jpeg_quality", 80)
         self.declare_parameter("publish_raw", True)
-        self.declare_parameter("max_fps", 15.0)
+        self.declare_parameter("max_fps", 2.0)
 
         # Retrieve parameter values
         cam1_topic = self.get_parameter("cam1_topic").value
@@ -132,7 +132,6 @@ class MultiCameraTrackerNode(Node):
         # Buffers for dual cameras
         self.cam1_latest: Optional[Tuple[Image, np.ndarray, float]] = None
         self.cam2_latest: Optional[Tuple[Image, np.ndarray, float]] = None
-        self.last_infer_sim_time = -1.0
         self.last_infer_wall_time = 0.0
 
         # Subscriptions
@@ -197,17 +196,11 @@ class MultiCameraTrackerNode(Node):
         wall_now = time.monotonic()
         min_interval = 1.0 / self.max_fps if self.max_fps > 0 else 0.0
 
-        if sim_time > 0.0:
-            if self.last_infer_sim_time >= 0.0 and (sim_time - self.last_infer_sim_time) < (min_interval - 1e-4):
-                return
-            self.last_infer_sim_time = sim_time
-        else:
-            if (wall_now - self.last_infer_wall_time) < (min_interval - 1e-4):
-                return
-            self.last_infer_wall_time = wall_now
+        if (wall_now - self.last_infer_wall_time) < (min_interval - 1e-4):
+            return
+        self.last_infer_wall_time = wall_now
 
-        current_time = sim_time if sim_time > 0.0 else wall_now
-        self.process_cameras(current_time)
+        self.process_cameras(sim_time)
 
     def detect_camera(
         self, cam_id: str, bgr: np.ndarray
