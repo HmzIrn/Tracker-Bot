@@ -234,6 +234,76 @@
         "clear": true
       },
       "problemMatcher": []
+    },
+    {
+      "label": "Sim: Headless Gazebo (internal)",
+      "type": "shell",
+      "hide": true,
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py headless:=true"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
+          "source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py headless:=true"
+        ]
+      },
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Sim: YOLO Inference Node (internal)",
+      "type": "shell",
+      "hide": true,
+      "command": "bash",
+      "args": [
+        "-lc",
+        "sleep 10 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
+          "sleep 10 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+        ]
+      },
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Sim: View YOLO Compressed Feed (internal)",
+      "type": "shell",
+      "hide": true,
+      "command": "bash",
+      "args": [
+        "-lc",
+        "sleep 15 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && (ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_annotated -r out/compressed:=/camera/image_annotated/compressed &) && sleep 2 && ros2 run rqt_image_view rqt_image_view /camera/image_annotated/compressed"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
+          "sleep 15 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && (ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_annotated -r out/compressed:=/camera/image_annotated/compressed &) && sleep 2 && ros2 run rqt_image_view rqt_image_view /camera/image_annotated/compressed"
+        ]
+      },
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ROS 2: Headless Sim + YOLO + Compressed Feed",
+      "dependsOn": [
+        "Sim: Headless Gazebo (internal)",
+        "Sim: YOLO Inference Node (internal)",
+        "Sim: View YOLO Compressed Feed (internal)"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
     }
   ]
 }
