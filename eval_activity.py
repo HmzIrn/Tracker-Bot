@@ -58,11 +58,11 @@ class EvalActivityNode(Node):
             spd = best.get("speed_mps", best.get("speed", 0.0))
             cameras = best.get("cameras_seen", [])
 
-        # 19s actor cycle
-        phase_t = sim_t % 19.0
-        if phase_t < 4.0:
+        # 27s actor cycle (Milestone 11)
+        phase_t = sim_t % 27.0
+        if phase_t < 12.0:
             gt_phase = "Idle (Staying)"
-        elif phase_t < 12.0:
+        elif phase_t < 20.0:
             gt_phase = "Walking"
         else:
             gt_phase = "Running"

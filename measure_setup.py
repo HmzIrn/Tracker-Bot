@@ -24,10 +24,10 @@ class TopicCounter(Node):
         self.cam2_count = 0
         from rclpy.qos import qos_profile_sensor_data
         self.sub1 = self.create_subscription(
-            Image, "/camera/image_raw", self.cb1, qos_profile_sensor_data
+            Image, "/surveillance_camera/image_raw", self.cb1, qos_profile_sensor_data
         )
         self.sub2 = self.create_subscription(
-            Image, "/camera2/image_raw", self.cb2, qos_profile_sensor_data
+            Image, "/corner_camera/image_raw", self.cb2, qos_profile_sensor_data
         )
 
     def cb1(self, msg):

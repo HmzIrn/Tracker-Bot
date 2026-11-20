@@ -1,0 +1,9 @@
+[INFO] [1795191638.557571009] [yolo_node]: Loading YOLO model: yolov8n.pt on device=cpu...
+[INFO] [1795191638.954206979] [yolo_node]: YoloNode initialized successfully.
+  Overhead camera: /surveillance_camera/image_raw
+  Corner camera:   /corner_camera/image_raw
+  Activity topic:  /person_activity
+  Compressed:      /yolo/annotated/compressed (max 640x480, max 10.0 fps, quality 70)
+  Goal pose:       /goal_pose (dwell 5.0s, cooldown 15.0s)
+/home/hmz/yolo_venv/lib/python3.12/site-packages/torch/cuda/__init__.py:228: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 12050). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at /__w/pytorch/pytorch/c10/cuda/CUDAFunctions.cpp:119.)
+  return torch._C._cuda_getDeviceCount() > 0

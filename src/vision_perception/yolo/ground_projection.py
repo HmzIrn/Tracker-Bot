@@ -1,7 +1,7 @@
 """Ground projection module for surveillance cameras.
 
-Back-projects pixel coordinates (e.g. bounding box bottom-center corresponding to feet)
-onto the ground plane z=0 in Gazebo world coordinates.
+Back-projects pixel coordinates (e.g. bounding box bottom-center corresponding to feet
+or bbox center for overhead top-down view) onto the ground plane z=0 in Gazebo world coordinates.
 """
 
 import math
@@ -87,12 +87,21 @@ class GroundProjector:
         """Initialize with dictionary of camera configurations."""
         self.cameras = {}
         for cam_id, cfg in camera_configs.items():
+            if not isinstance(cfg, dict) or "pose" not in cfg:
+                continue
             self.cameras[cam_id] = {
                 "pose": cfg["pose"],
                 "width": cfg.get("width", 640),
                 "height": cfg.get("height", 480),
                 "hfov": cfg.get("hfov", 1.05),
+                "ground_point": cfg.get("ground_point", "bottom_center"),
             }
+
+    def get_ground_point_type(self, cam_id: str) -> str:
+        """Get ground point extraction mode for camera ('bottom_center' or 'center')."""
+        if cam_id not in self.cameras:
+            raise KeyError(f"Unknown camera ID: {cam_id}")
+        return self.cameras[cam_id]["ground_point"]
 
     def project(self, cam_id: str, u: float, v: float) -> Optional[Tuple[float, float]]:
         """Project pixel (u, v) from camera cam_id to world ground (x, y)."""
@@ -107,3 +116,15 @@ class GroundProjector:
             height=cfg["height"],
             hfov=cfg["hfov"],
         )
+
+    def project_bbox(self, cam_id: str, bbox: Sequence[float]) -> Optional[Tuple[float, float]]:
+        """Project bbox [x1, y1, x2, y2] to world ground using camera's ground_point mode."""
+        x1, y1, x2, y2 = bbox
+        mode = self.get_ground_point_type(cam_id)
+        if mode == "center":
+            u = (x1 + x2) / 2.0
+            v = (y1 + y2) / 2.0
+        else:
+            u = (x1 + x2) / 2.0
+            v = float(y2)
+        return self.project(cam_id, u, v)

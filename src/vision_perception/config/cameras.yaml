@@ -1,0 +1,21 @@
+overhead_camera:
+  topic: "/surveillance_camera/image_raw"
+  pose: [0.0, 0.0, 12.2, 0.0, 1.5708, 1.5708]
+  width: 640
+  height: 480
+  hfov: 1.50
+  ground_point: "center"
+
+corner_camera:
+  topic: "/corner_camera/image_raw"
+  pose: [-7.0, -7.0, 2.3, 0.0, 0.25, 0.7854]
+  width: 640
+  height: 480
+  hfov: 1.05
+  ground_point: "bottom_center"
+
+goal_pose:
+  staying_dwell_sec: 5.0
+  goal_cooldown_sec: 15.0
+  world_to_map: [0.0, 0.0, 0.0]
+

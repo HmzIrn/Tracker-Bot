@@ -1,0 +1,23 @@
+[INFO] [launch]: All log files can be found below /home/hmz/.ros/log/2026-11-20-21-20-21-484281-HMZ-469
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [gazebo-1]: process started with pid [495]
+[INFO] [parameter_bridge-2]: process started with pid [496]
+[INFO] [parameter_bridge-3]: process started with pid [497]
+[parameter_bridge-2] [INFO] [1795191626.549809010] [camera_bridge]: Creating GZ->ROS Bridge: [/surveillance_camera/image_raw (gz.msgs.Image) -> /surveillance_camera/image_raw (sensor_msgs/msg/Image)] (Lazy 0)
+[parameter_bridge-3] [INFO] [1795191626.550091010] [clock_bridge]: Creating GZ->ROS Bridge: [/clock (gz.msgs.Clock) -> /clock (rosgraph_msgs/msg/Clock)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1795191626.567023609] [camera_bridge]: Creating GZ->ROS Bridge: [/surveillance_camera/camera_info (gz.msgs.CameraInfo) -> /surveillance_camera/camera_info (sensor_msgs/msg/CameraInfo)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1795191626.568645709] [camera_bridge]: Creating GZ->ROS Bridge: [/corner_camera/image_raw (gz.msgs.Image) -> /corner_camera/image_raw (sensor_msgs/msg/Image)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1795191626.569852109] [camera_bridge]: Creating GZ->ROS Bridge: [/corner_camera/camera_info (gz.msgs.CameraInfo) -> /corner_camera/camera_info (sensor_msgs/msg/CameraInfo)] (Lazy 0)
+[gazebo-1] NodeShared::Publish() Error: Interrupted system call
+[gazebo-1] NodeShared::Publish() Error: Interrupted system call
+[gazebo-1] NodeShared::Publish() Error: Interrupted system call
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [parameter_bridge-3]: sending signal 'SIGINT' to process[parameter_bridge-3]
+[INFO] [parameter_bridge-2]: sending signal 'SIGINT' to process[parameter_bridge-2]
+[INFO] [gazebo-1]: sending signal 'SIGINT' to process[gazebo-1]
+[parameter_bridge-3] [INFO] [1795191810.685958643] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-2] [INFO] [1795191810.686018543] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-3] [INFO] [1795191810.695797046] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-2] [INFO] [1795191810.697132347] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [parameter_bridge-3]: process has finished cleanly [pid 497]
+[INFO] [parameter_bridge-2]: process has finished cleanly [pid 496]

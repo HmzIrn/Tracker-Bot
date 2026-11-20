@@ -38,36 +38,39 @@ def generate_launch_description():
         'surveillance_world.sdf'
     ])
 
-    image_bridge = Node(
-        package='ros_gz_image',
-        executable='image_bridge',
-        name='image_bridge',
-        arguments=['/camera/image_raw', '/camera2/image_raw'],
+    camera_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='camera_bridge',
+        arguments=[
+            '/surveillance_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/surveillance_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            '/corner_camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/corner_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+        ],
         output='screen',
     )
 
-    camera_info_bridge = Node(
+    clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
-        name='camera_info_bridge',
-        arguments=[
-            '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
-            '/camera2/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
-        ],
+        name='clock_bridge',
+        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
         output='screen',
+        condition=IfCondition(LaunchConfiguration('bridge_clock')),
     )
 
     rqt_image_view = Node(
         package='rqt_image_view',
         executable='rqt_image_view',
-        arguments=['/camera/image_raw'],
+        arguments=['/surveillance_camera/image_raw'],
         condition=IfCondition(LaunchConfiguration('rqt')),
     )
 
     yolo_inference = Node(
-        package='surveillance_sim',
-        executable='inference.py',
-        name='yolo_inference',
+        package='vision_perception',
+        executable='yolo_node',
+        name='yolo_node',
         output='screen',
         condition=IfCondition(LaunchConfiguration('yolo')),
     )
@@ -89,6 +92,11 @@ def generate_launch_description():
             description='Start simulation paused. If false, passes -r to run on start.'
         ),
         DeclareLaunchArgument(
+            'bridge_clock',
+            default_value='false',
+            description='Bridge /clock from Gazebo to ROS 2 if true.'
+        ),
+        DeclareLaunchArgument(
             'rqt',
             default_value='false',
             description='Launch rqt_image_view to view the camera feed.'
@@ -99,8 +107,8 @@ def generate_launch_description():
             description='Start YOLO person tracking and activity classification node.'
         ),
         OpaqueFunction(function=launch_setup),
-        image_bridge,
-        camera_info_bridge,
+        camera_bridge,
+        clock_bridge,
         rqt_image_view,
         yolo_inference,
     ])

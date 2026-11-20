@@ -2,6 +2,44 @@
 
 All notable changes and verification outcomes are documented in this file.
 
+## [Milestone 11] - 2026-11-20: Flutter Dashboard Integration Contract
+
+### Step 4: /goal_pose Publisher
+- Added goal pose configuration to `config/cameras.yaml` (`staying_dwell_sec: 5.0`, `goal_cooldown_sec: 15.0`, `world_to_map: [0.0, 0.0, 0.0]`), declared in `yolo_node` with runtime ROS parameter override support.
+- Implemented `GoalPoseManager` logic: emits a single `geometry_msgs/msg/PoseStamped` on `/goal_pose` (frame "map", z=0, w=1.0) when a tracked person dwells in "Staying" continuously for >= 5.0 seconds (sim time). Uses median projected floor coordinates over the dwelling window, transformed by `world_to_map`.
+- Enforced a 15.0-second global cooldown between goal publications and immediate episode reset when the track leaves Staying or is lost.
+- Implemented occupancy grid free-space nudging subscribing to `/map` (transient-local QoS): nudges targets to the nearest free cell within 0.5 m if occupied, logs a warning and skips publishing if no free cell is within 0.5 m, or logs a one-time warning and publishes unadjusted if `/map` is not yet available.
+- Added comprehensive unit tests in `test_goal_manager.py` verifying dwell timing, once-per-episode emission, cooldown gating, episode reset, median filtering, world->map frame transformation, and free-space nudging.
+- Verification: `colcon build --symlink-install` passed, all 24 pytest tests passed.
+
+### Step 3: Contract-Clean Activity Labels and Annotated Stream
+- Enforced `use_sim_time=True` directly inside `YoloNode` constructor parameter overrides.
+- Implemented camera-specific ground point projection (`center` for overhead camera, `bottom_center` for corner camera).
+- Enforced `/person_activity` contract compliance: publishes strictly `"Walking"`, `"Running"`, or `"Staying"` (case-sensitive) with priority `Staying > Running > Walking`. Publishes nothing when nobody is classified. Implemented 1-10 Hz rate limiter and heartbeat.
+- Composed side-by-side annotated stream with overhead view first, corner view second, each resized to 320x240 (total frame 640x240, within 640x480 limit), JPEG quality 70, capped at 10 fps. Annotated bounding boxes, track IDs, activity labels, and map coordinates `(x, y)` in meters.
+- Configured clean shutdown on SIGINT with `rclpy.try_shutdown()`.
+- Added `test_contract_rules.py` verifying severity ranking, empty filter, and stream dimensions.
+- Verification: `colcon build --symlink-install` passed, all 24 pytest tests passed.
+
+### Step 2: Package Split and Executable Name
+- Created package `vision_perception` with `ament_cmake` layout and moved perception code, tests, and `config/cameras.yaml` from `surveillance_sim`. `surveillance_sim` now only retains world, models, and launch.
+- Installed inference executable renamed as `yolo_node` in `lib/vision_perception`, keeping helper modules (`activity_classifier`, `ground_projection`, `goal_manager`) importable.
+- Configured dynamic loading of `config/cameras.yaml` via ament index package share path (`get_package_share_directory('vision_perception')`).
+- Declared dependencies in `vision_perception/package.xml` (`rclpy`, `sensor_msgs`, `std_msgs`, `geometry_msgs`, `nav_msgs`) and updated `surveillance_sim/package.xml` to depend on `vision_perception`.
+- Prioritized `~/yolo_env` site-packages on `sys.path`, falling back to `~/yolo_venv`, with `numpy<2` compatibility notes.
+- Updated `cameras.yaml` with overhead camera pose (`[0.0, 0.0, 12.2, 0.0, 1.5708, 1.5708]`, `ground_point: center`) and corner camera pose (`[-7.0, -7.0, 2.3, 0.0, 0.25, 0.7854]`, `ground_point: bottom_center`).
+- Added anti-drift pytest `test_camera_sdf_drift.py` validating that `cameras.yaml` and `surveillance_world.sdf` camera poses stay synchronized.
+- Verified `ros2 pkg prefix vision_perception` and `ros2 pkg executables vision_perception` show `yolo_node`.
+- Verification: `colcon build --symlink-install` passed, all 42 pytest tests passed.
+
+### Step 1: Cameras and World Bridges
+- Renamed corner camera model to `corner_camera` in `surveillance_world.sdf` with topics `/corner_camera/image_raw` and `/corner_camera/camera_info`, lowered update rate to 10 Hz.
+- Converted north camera into `overhead_camera` mounted at `(0.0, 0.0, 12.2)` looking straight down (RPY `[0, 1.5708, 1.5708]`) with 1.50 rad HFOV, publishing 30 Hz at `/surveillance_camera/image_raw`. Coverage math: vertical ground span 17.05 m provides >0.5 m margin around the 16x16 m room, horizontal ground span 22.73 m provides >3.3 m margin. Orientation verified: image-up is +Y, image-right is +X.
+- Switched `surveillance_world.launch.py` to `ros_gz_bridge parameter_bridge` for both cameras' raw images and camera_info. Removed `ros_gz_image image_bridge` to prevent duplicate compressed streams. Added `bridge_clock` launch argument.
+- Lengthened actor idle segment from 4.0s to 12.0s (total cycle 27.0s: idle 0-12s, walk 12-20s, run 20-27s).
+- Updated `context.md`, `run_sim.ps1`, and `.vscode/tasks.json` with new camera topics and `export ROS_DOMAIN_ID=30`.
+- Verification: `colcon build --symlink-install` passed, 13 pytest tests passed.
+
 ## [Milestone 10] - 2026-11-17: Repair Simulation-to-YOLO Launch and Feed
 
 ### Fixed

@@ -74,20 +74,29 @@ ros2_ws/
     - `partition_wall`: Central corridor wall at (0, -2.0, 1.0), size 4.0m × 0.2m × 2.0m.
     - `crate_sw`: Storage crate at (-4.0, -4.5, 0.5), size 1.2m × 1.2m × 1.0m.
     - `crate_se`: Storage crate at (4.5, -4.0, 0.4), size 1.5m × 1.0m × 0.8m.
-  - **Fixed Surveillance Camera (`surveillance_camera`)**:
+  - **Fixed Corner Camera (`corner_camera`)**:
     - **Mount Pose**: `-7.0 -7.0 2.3 0 0.25 0.7854` (South-West corner, 2.3m elevation, ~14.3° downward pitch, 45° yaw aiming diagonally across the room towards (0, 0)).
     - **Coverage**: Overlooks all obstacles (`crate_sw` in foreground, `partition_wall` in midground, `pillar_nw` and `pillar_ne` in background).
     - **Sensor Configuration**:
       - Resolution: 640 × 480 pixels.
-      - Update Rate: 30 Hz.
+      - Update Rate: 10 Hz (lowered to save GPU resources; auxiliary camera).
       - Horizontal FOV: 1.05 radians (~60.16°).
       - Pixel Format: `R8G8B8`.
       - Clip Planes: near 0.1m, far 50.0m.
-      - Gazebo Topic: `/camera/image_raw` (Type: `gz.msgs.Image`).
-      - Gazebo Camera Info Topic: `/camera/camera_info` (Type: `gz.msgs.CameraInfo`).
-  - **Fixed Surveillance Camera 2 (`surveillance_camera_2`)**:
-    - Mount pose: `0.0 7.0 2.3 0.0 0.2 -1.57`, facing south from the north side of the room.
-    - Publishes 640 × 480 RGB frames at 30 Hz on `/camera2/image_raw`.
+      - Gazebo Topic: `/corner_camera/image_raw` (Type: `gz.msgs.Image`).
+      - Gazebo Camera Info Topic: `/corner_camera/camera_info` (Type: `gz.msgs.CameraInfo`).
+  - **Fixed Overhead Surveillance Camera (`overhead_camera`)**:
+    - **Mount Pose**: `0.0 0.0 12.2 0 1.5708 1.5708` (Mounted at room center looking straight down; image-up = world +Y, image-right = world +X).
+    - **Coverage**: Complete top-down view of the 16m × 16m room with >0.5m perimeter margin.
+      - Mathematical height & FOV derivation: With image 640 × 480 (aspect ratio 4:3) and horizontal FOV $\theta_h = 1.50\text{ rad}$ ($\theta_h/2 = 0.75\text{ rad}$, $\tan(0.75) \approx 0.9316$), the vertical half-FOV is $\tan(\theta_v/2) = (480/640)\tan(\theta_h/2) = 0.75 \times 0.9316 = 0.6987$. At mounting height $H = 12.2\text{ m}$, vertical floor coverage is $2 \times 12.2 \times 0.6987 \approx 17.05\text{ m}$ (giving $(17.05 - 16.0)/2 \approx 0.52\text{ m}$ margin along the room's North-South axis). Horizontal floor coverage is $2 \times 12.2 \times 0.9316 \approx 22.73\text{ m}$ (>3.3m margin East-West).
+    - **Sensor Configuration**:
+      - Resolution: 640 × 480 pixels.
+      - Update Rate: 30 Hz.
+      - Horizontal FOV: 1.50 radians (~85.94°).
+      - Pixel Format: `R8G8B8`.
+      - Clip Planes: near 0.1m, far 50.0m.
+      - Gazebo Topic: `/surveillance_camera/image_raw` (Type: `gz.msgs.Image`).
+      - Gazebo Camera Info Topic: `/surveillance_camera/camera_info` (Type: `gz.msgs.CameraInfo`).
   - **Animated Human Subject (`human_subject`)**:
     - **Architecture**: Kinematic `<actor>` model with skeletal animation clips, avoiding rigid-body physics contact solver overhead.
     - **Asset Storage**: Portable meshes installed locally in `models/human/meshes/` (`stand.dae`, `walk.dae`, `run.dae`).
@@ -95,30 +104,34 @@ ros2_ws/
       - `idle`: Natural standing pose (`stand.dae`) in the center of the room within direct camera view.
       - `walk`: Steady walking locomotion (`walk.dae`) at ~1.0 m/s along the midground corridor.
       - `run`: Dynamic running gait (`run.dae`) at ~2.5 m/s across the surveillance area.
-    - **Trajectory Cycle**: Defined via `<script>` with `<loop>true</loop>`:
-      - 0.0s - 4.0s: **Idle** at `(0, 0, 1.0)`, yaw 45° facing the camera.
-      - 4.0s - 12.0s: **Walk** from `(0, 0, 1.0)` to `(2.5, 2.5, 1.0)` then `(0.5, 4.5, 1.0)`.
-      - 12.0s - 19.0s: **Run** from `(0.5, 4.5, 1.0)` to `(-2.5, 1.5, 1.0)` and loop back to origin `(0, 0, 1.0)`.
+    - **Trajectory Cycle**: Defined via `<script>` with `<loop>true</loop>` (total 27.0s):
+      - 0.0s - 12.0s: **Idle (Staying)** at `(0, 0, 1.0)`, yaw 45° facing corner camera.
+      - 12.0s - 20.0s: **Walk** from `(0, 0, 1.0)` to `(2.5, 2.5, 1.0)` then `(0.5, 4.5, 1.0)`.
+      - 20.0s - 27.0s: **Run** from `(0.5, 4.5, 1.0)` to `(-2.5, 1.5, 1.0)` and loop back to origin `(0, 0, 1.0)`.
     - **Performance Characteristics**: Hardware-accelerated vertex skinning on the NVIDIA GPU via D3D12 with negligible CPU load (~0% physics collision solver impact).
 
 ### ROS 2 Integration & Launch Configuration (`surveillance_world.launch.py`)
 - Resolves the world file path dynamically via `FindPackageShare('surveillance_sim')`.
 - Includes `gz_sim.launch.py` from `ros_gz_sim`.
-- Automatically spawns bridging nodes:
-  - `ros_gz_image/image_bridge`: Bridges Gazebo `/camera/image_raw` (`gz.msgs.Image`) to ROS 2 `/camera/image_raw` (`sensor_msgs/msg/Image`) via `image_transport`.
-  - `ros_gz_image/image_bridge`: Also bridges `/camera2/image_raw`.
-  - `ros_gz_bridge/parameter_bridge`: Bridges camera info for both cameras.
-  - `rqt_image_view`: Optional GUI node conditionally launched when `rqt:=true`.
+- Spawns bridging nodes via `ros_gz_bridge/parameter_bridge`:
+  - Bridges Gazebo `/surveillance_camera/image_raw` (`gz.msgs.Image`) to ROS 2 `/surveillance_camera/image_raw` (`sensor_msgs/msg/Image`).
+  - Bridges `/surveillance_camera/camera_info` (`gz.msgs.CameraInfo`) to ROS 2 (`sensor_msgs/msg/CameraInfo`).
+  - Bridges Gazebo `/corner_camera/image_raw` (`gz.msgs.Image`) to ROS 2 `/corner_camera/image_raw` (`sensor_msgs/msg/Image`).
+  - Bridges `/corner_camera/camera_info` (`gz.msgs.CameraInfo`) to ROS 2 (`sensor_msgs/msg/CameraInfo`).
+  - Optionally bridges `/clock` when `bridge_clock:=true`.
+  - NOTE: `ros_gz_image/image_bridge` removed to avoid generating redundant duplicate compressed topics.
+  - `rqt_image_view`: Optional GUI node conditionally launched when `rqt:=true` viewing `/surveillance_camera/image_raw`.
 - Supported Launch Arguments:
   - `world`: Path to the SDF world file. Defaults to installed `share/surveillance_sim/worlds/surveillance_world.sdf`.
   - `headless`: `true` or `false` (default: `false`). When `true`, passes `-s` to Gazebo.
   - `paused`: `true` or `false` (default: `false`). When `false`, passes `-r` to Gazebo.
-  - `rqt`: `true` or `false` (default: `false`). Launches `rqt_image_view` viewing `/camera/image_raw`.
-  - `yolo`: `true` or `false` (default: `false`). Starts the YOLO tracking and activity classification node (`inference.py`).
+  - `bridge_clock`: `true` or `false` (default: `false`). Bridges Gazebo `/clock` to ROS 2.
+  - `rqt`: `true` or `false` (default: `false`). Launches `rqt_image_view` viewing `/surveillance_camera/image_raw`.
+  - `yolo`: `true` or `false` (default: `false`). Starts the YOLO tracking and activity classification node.
 
 ### YOLO Perception & Activity Classification Architecture
-The perception pipeline (`src/surveillance_sim/yolo/`) consumes both `/camera/image_raw` and `/camera2/image_raw`:
-- **Detection and Tracking**: Ultralytics YOLO detects persons in each camera. Bottom-center detections are projected to the floor using each camera's calibrated pose, fused across cameras, then associated across frames to maintain global IDs.
+The perception pipeline consumes both `/surveillance_camera/image_raw` and `/corner_camera/image_raw`:
+- **Detection and Tracking**: Ultralytics YOLO detects persons in each camera. Projected to the floor using each camera's calibrated pose, fused across cameras, then associated across frames to maintain global IDs.
 - **Pure Activity Classifier (`ActivityClassifier`)**:
   - Independent unit-testable class tracking projected world-ground coordinates for each global track ID.
   - Uses simulation timestamps from image headers.
@@ -128,23 +141,24 @@ The perception pipeline (`src/surveillance_sim/yolo/`) consumes both `/camera/im
     - `Walking`: $\text{staying\_thresh} \le v < \text{running\_thresh}$
     - `Running`: $v \ge \text{running\_thresh}$
     - `Unknown`: Insufficient track history (< `min_samples=3`).
-    - `None`: No human detected in field of view (e.g., when occluded by walls/pillars).
+    - `None`: No human detected in field of view.
   - Majority-vote smoothing over the last $N$ predictions (`smoothing_n`) eliminates frame-to-frame gait cycle oscillation and jitter.
   - Stale tracks are pruned automatically after `track_timeout_sec`.
 - **CV Bridge Avoidance**: Image conversions are implemented directly using raw `numpy` buffer slicing and OpenCV (`cv2`) without `cv_bridge` to prevent numpy 1.x vs 2.x ABI crashes.
-- **Annotated Streaming**: A side-by-side frame with both camera views and detection labels is published as raw `/camera/image_annotated` for RQt. A separate JPEG `sensor_msgs/msg/CompressedImage` is published on `/yolo/annotated/compressed` for clients that support that message type.
+- **Annotated Streaming**: Side-by-side frame (overhead + corner views, at most 640x480) published as JPEG `sensor_msgs/msg/CompressedImage` on `/yolo/annotated/compressed` (capped at 10 fps).
+- **Goal Pose**: `/goal_pose` (`geometry_msgs/msg/PoseStamped`) published on staying event >= 5s.
 
 ### ROS 2 Topics
 | Topic | Message Type | Direction | Description |
 | :--- | :--- | :--- | :--- |
-| `/camera/image_raw` | `sensor_msgs/msg/Image` | Subscribed | Raw RGB8 640x480 30 FPS camera feed from Gazebo bridge |
-| `/camera2/image_raw` | `sensor_msgs/msg/Image` | Subscribed | Second camera feed from Gazebo bridge |
-| `/camera/camera_info` | `sensor_msgs/msg/CameraInfo` | Bridged | Camera intrinsic calibration info |
-| `/camera2/camera_info` | `sensor_msgs/msg/CameraInfo` | Bridged | Second camera calibration info |
-| `/camera/image_annotated` | `sensor_msgs/msg/Image` | Published | Raw BGR8 annotated frame (gated by `publish_raw` parameter) |
-| `/yolo/annotated/compressed`| `sensor_msgs/msg/CompressedImage` | Published | JPEG-compressed annotated frame for web/Flutter streaming |
-| `/person_activity` | `std_msgs/msg/String` | Published | Prominent person activity label (`Walking`, `Running`, `Staying`, `None`) |
-| `/person_activity_json` | `std_msgs/msg/String` | Published | Structured JSON payload with timestamp and per-person telemetry |
+| `/surveillance_camera/image_raw` | `sensor_msgs/msg/Image` | Bridged | Raw RGB8 640x480 30 FPS overhead camera feed from Gazebo bridge |
+| `/surveillance_camera/camera_info`| `sensor_msgs/msg/CameraInfo` | Bridged | Overhead camera calibration info |
+| `/corner_camera/image_raw` | `sensor_msgs/msg/Image` | Bridged | Auxiliary corner camera feed (10 FPS) from Gazebo bridge |
+| `/corner_camera/camera_info` | `sensor_msgs/msg/CameraInfo` | Bridged | Corner camera calibration info |
+| `/yolo/annotated/compressed`| `sensor_msgs/msg/CompressedImage` | Published | JPEG-compressed annotated frame for web/Flutter streaming (max 640x480, max 10 fps) |
+| `/person_activity` | `std_msgs/msg/String` | Published | Case-sensitive contract string ("Walking", "Running", "Staying") |
+| `/goal_pose` | `geometry_msgs/msg/PoseStamped` | Published | Person foot position in map coordinates upon staying >= 5s |
+| `/clock` | `rosgraph_msgs/msg/Clock` | Bridged | Simulation clock (when `bridge_clock:=true`) |
 
 ### Node Parameters (`inference.py`)
 | Parameter | Type | Default | Description |

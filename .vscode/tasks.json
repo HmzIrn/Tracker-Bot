@@ -7,7 +7,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py"
+        "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py"
       ],
       "windows": {
         "command": "wsl",
@@ -18,7 +18,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py"
+          "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py"
         ]
       },
       "options": {
@@ -37,7 +37,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py rqt:=true"
+        "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py rqt:=true"
       ],
       "windows": {
         "command": "wsl",
@@ -48,7 +48,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py rqt:=true"
+          "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py rqt:=true"
         ]
       },
       "options": {
@@ -67,7 +67,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true"
+        "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true"
       ],
       "windows": {
         "command": "wsl",
@@ -78,7 +78,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true"
+          "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true"
         ]
       },
       "options": {
@@ -97,7 +97,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && gz sim -r src/surveillance_sim/worlds/surveillance_world.sdf"
+        "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && gz sim -r src/surveillance_sim/worlds/surveillance_world.sdf"
       ],
       "windows": {
         "command": "wsl",
@@ -108,7 +108,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && gz sim -r src/surveillance_sim/worlds/surveillance_world.sdf"
+          "export ROS_DOMAIN_ID=30 && export GALLIUM_DRIVER=d3d12 && export MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA && source /opt/ros/jazzy/setup.bash && gz sim -r src/surveillance_sim/worlds/surveillance_world.sdf"
         ]
       },
       "options": {
@@ -127,7 +127,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
+        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
       ],
       "windows": {
         "command": "wsl",
@@ -138,7 +138,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
+          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && colcon build --symlink-install"
         ]
       },
       "options": {
@@ -156,7 +156,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 topic list"
+        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 topic list"
       ],
       "windows": {
         "command": "wsl",
@@ -167,7 +167,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 topic list"
+          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 topic list"
         ]
       },
       "options": {
@@ -181,7 +181,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
       ],
       "windows": {
         "command": "wsl",
@@ -192,7 +192,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
         ]
       },
       "options": {
@@ -206,12 +206,12 @@
       "problemMatcher": []
     },
     {
-      "label": "ROS 2: View YOLO Feed (RQt)",
+      "label": "ROS 2: View Overhead Camera (RQt)",
       "type": "shell",
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /camera/image_annotated"
+        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /surveillance_camera/image_raw"
       ],
       "windows": {
         "command": "wsl",
@@ -222,7 +222,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /camera/image_annotated"
+          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /surveillance_camera/image_raw"
         ]
       },
       "options": {
@@ -242,13 +242,13 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py headless:=true"
+        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py headless:=true bridge_clock:=true"
       ],
       "windows": {
         "command": "wsl",
         "args": [
           "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
-          "source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py headless:=true"
+          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && if [ ! -f install/setup.bash ]; then colcon build --symlink-install; fi && source install/setup.bash && ros2 launch surveillance_sim surveillance_world.launch.py headless:=true bridge_clock:=true"
         ]
       },
       "options": { "cwd": "${workspaceFolder}" },
@@ -262,13 +262,13 @@
       "command": "bash",
       "args": [
         "-lc",
-        "sleep 10 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+        "sleep 10 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
       ],
       "windows": {
         "command": "wsl",
         "args": [
           "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
-          "sleep 10 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/yolo_venv/bin/activate && ros2 run surveillance_sim inference.py"
+          "sleep 10 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
         ]
       },
       "options": { "cwd": "${workspaceFolder}" },
@@ -276,19 +276,19 @@
       "problemMatcher": []
     },
     {
-      "label": "Sim: View YOLO Compressed Feed (internal)",
+      "label": "Sim: View Overhead Camera (internal)",
       "type": "shell",
       "hide": true,
       "command": "bash",
       "args": [
         "-lc",
-        "sleep 15 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && (ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_annotated -r out/compressed:=/camera/image_annotated/compressed &) && sleep 2 && ros2 run rqt_image_view rqt_image_view /camera/image_annotated/compressed"
+        "sleep 15 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /surveillance_camera/image_raw"
       ],
       "windows": {
         "command": "wsl",
         "args": [
           "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
-          "sleep 15 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && (ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_annotated -r out/compressed:=/camera/image_annotated/compressed &) && sleep 2 && ros2 run rqt_image_view rqt_image_view /camera/image_annotated/compressed"
+          "sleep 15 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run rqt_image_view rqt_image_view /surveillance_camera/image_raw"
         ]
       },
       "options": { "cwd": "${workspaceFolder}" },
@@ -296,11 +296,11 @@
       "problemMatcher": []
     },
     {
-      "label": "ROS 2: Headless Sim + YOLO + Compressed Feed",
+      "label": "ROS 2: Headless Sim + YOLO + Overhead View",
       "dependsOn": [
         "Sim: Headless Gazebo (internal)",
         "Sim: YOLO Inference Node (internal)",
-        "Sim: View YOLO Compressed Feed (internal)"
+        "Sim: View Overhead Camera (internal)"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []
