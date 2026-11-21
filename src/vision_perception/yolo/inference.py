@@ -9,10 +9,12 @@ Subscribes:
 
 Publishes:
   - /person_activity            (std_msgs/String, 'Staying' > 'Running' > 'Walking', 1-10 Hz)
-  - /yolo/annotated/compressed  (sensor_msgs/CompressedImage, overhead | corner side-by-side, max 640x480, max 10 fps, quality ~70)
+  - /yolo/annotated/compressed  (sensor_msgs/CompressedImage, overhead 640x480 JPEG)
+  - /yolo/corner/annotated/compressed (sensor_msgs/CompressedImage, corner 640x480 JPEG)
   - /goal_pose                  (geometry_msgs/PoseStamped, frame 'map', emitted once on staying >= 5s with >=15s cooldown)
   - /person_activity_json       (std_msgs/String, telemetry payload)
-  - /camera/image_annotated     (sensor_msgs/Image, optional raw annotated frame)
+  - /yolo/annotated/raw          (sensor_msgs/Image, optional raw overhead frame)
+  - /yolo/corner/annotated/raw   (sensor_msgs/Image, optional raw corner frame)
 
 Dependencies & Requirements:
   - numpy < 2.0 (Required to avoid C-ABI conflicts across PyTorch, OpenCV, and ROS 2 middleware)
@@ -54,7 +56,20 @@ import yaml
 from ultralytics import YOLO
 
 from activity_classifier import ActivityClassifier
-from goal_manager import GoalPoseManager, nudge_to_free_space, transform_world_to_map
+from annotated_stream import (
+    CORNER_COMPRESSED_TOPIC,
+    CORNER_RAW_TOPIC,
+    JPEG_QUALITY,
+    OVERHEAD_COMPRESSED_TOPIC,
+    OVERHEAD_RAW_TOPIC,
+    encode_native_jpeg,
+)
+from goal_manager import (
+    GoalPoseManager,
+    image_stamp_to_seconds,
+    nudge_to_free_space,
+    transform_world_to_map,
+)
 from ground_projection import GroundProjector
 
 import rclpy
@@ -92,25 +107,10 @@ def load_cameras_config() -> Dict[str, dict]:
             with open(path, "r") as f:
                 return yaml.safe_load(f)
 
-    # Hardcoded default fallback matching verified poses
-    return {
-        "overhead_camera": {
-            "topic": "/surveillance_camera/image_raw",
-            "pose": [0.0, 0.0, 12.2, 0.0, 1.5708, 1.5708],
-            "width": 640,
-            "height": 480,
-            "hfov": 1.50,
-            "ground_point": "center",
-        },
-        "corner_camera": {
-            "topic": "/corner_camera/image_raw",
-            "pose": [-7.0, -7.0, 2.3, 0.0, 0.25, 0.7854],
-            "width": 640,
-            "height": 480,
-            "hfov": 1.05,
-            "ground_point": "bottom_center",
-        },
-    }
+    raise FileNotFoundError(
+        "vision_perception/config/cameras.yaml was not found in the package share "
+        "or workspace source paths: " + ", ".join(candidates)
+    )
 
 
 class YoloNode(Node):
@@ -134,8 +134,10 @@ class YoloNode(Node):
         # Declare ROS 2 parameters
         self.declare_parameter("overhead_topic", overhead_topic_default)
         self.declare_parameter("corner_topic", corner_topic_default)
-        self.declare_parameter("output_compressed_topic", "/yolo/annotated/compressed")
-        self.declare_parameter("output_raw_topic", "/camera/image_annotated")
+        self.declare_parameter("output_compressed_topic", OVERHEAD_COMPRESSED_TOPIC)
+        self.declare_parameter("corner_output_compressed_topic", CORNER_COMPRESSED_TOPIC)
+        self.declare_parameter("output_raw_topic", OVERHEAD_RAW_TOPIC)
+        self.declare_parameter("corner_output_raw_topic", CORNER_RAW_TOPIC)
         self.declare_parameter("activity_topic", "/person_activity")
         self.declare_parameter("activity_json_topic", "/person_activity_json")
         self.declare_parameter("goal_pose_topic", "/goal_pose")
@@ -144,16 +146,16 @@ class YoloNode(Node):
         self.declare_parameter("model", "yolov8n.pt")
         self.declare_parameter("conf", 0.15)
         self.declare_parameter("device", "cpu")
-        self.declare_parameter("window_sec", 1.0)
+        self.declare_parameter("window_sec", 2.0)
         self.declare_parameter("staying_thresh", 0.3)
         self.declare_parameter("running_thresh", 1.75)
         self.declare_parameter("smoothing_n", 5)
         self.declare_parameter("track_timeout_sec", 2.0)
         self.declare_parameter("fusion_dist_thresh", 0.8)
         self.declare_parameter("tracking_dist_gate", 1.5)
-        self.declare_parameter("jpeg_quality", 70)  # Contract: quality about 70
+        self.declare_parameter("jpeg_quality", JPEG_QUALITY)
         self.declare_parameter("publish_raw", False)  # Contract: default false
-        self.declare_parameter("max_fps", 10.0)  # Contract: max 10 fps
+        self.declare_parameter("max_fps", 2.0)
 
         # Goal pose parameters (from cameras.yaml with ROS parameter overrides)
         cfg_goal = self.cameras_cfg.get("goal_pose", {})
@@ -167,7 +169,9 @@ class YoloNode(Node):
         overhead_topic = str(self.get_parameter("overhead_topic").value)
         corner_topic = str(self.get_parameter("corner_topic").value)
         compressed_topic = str(self.get_parameter("output_compressed_topic").value)
+        corner_compressed_topic = str(self.get_parameter("corner_output_compressed_topic").value)
         raw_topic = str(self.get_parameter("output_raw_topic").value)
+        corner_raw_topic = str(self.get_parameter("corner_output_raw_topic").value)
         activity_topic = str(self.get_parameter("activity_topic").value)
         json_topic = str(self.get_parameter("activity_json_topic").value)
         goal_topic = str(self.get_parameter("goal_pose_topic").value)
@@ -177,7 +181,10 @@ class YoloNode(Node):
         self.device = str(self.get_parameter("device").value)
         self.jpeg_quality = int(self.get_parameter("jpeg_quality").value)
         self.publish_raw = bool(self.get_parameter("publish_raw").value)
-        self.max_fps = float(self.get_parameter("max_fps").value)
+        requested_max_fps = float(self.get_parameter("max_fps").value)
+        if not math.isfinite(requested_max_fps) or requested_max_fps <= 0.0:
+            raise ValueError("max_fps must be a positive finite value")
+        self.max_fps = min(10.0, requested_max_fps)
         self.fusion_dist_thresh = float(self.get_parameter("fusion_dist_thresh").value)
         self.tracking_dist_gate = float(self.get_parameter("tracking_dist_gate").value)
         self.track_timeout_sec = float(self.get_parameter("track_timeout_sec").value)
@@ -208,7 +215,6 @@ class YoloNode(Node):
 
         # Map state and warning flag
         self.map_msg: Optional[OccupancyGrid] = None
-        self.warned_no_map = False
 
         # Initialize YOLO model
         model_name = self.get_parameter("model").value
@@ -249,13 +255,18 @@ class YoloNode(Node):
         # Publishers
         self.pub_activity = self.create_publisher(String, activity_topic, 10)
         self.pub_compressed = self.create_publisher(CompressedImage, compressed_topic, 10)
+        self.pub_corner_compressed = self.create_publisher(
+            CompressedImage, corner_compressed_topic, 10
+        )
         self.pub_goal = self.create_publisher(PoseStamped, goal_topic, 10)
         self.pub_json = self.create_publisher(String, json_topic, 10)
 
         if self.publish_raw:
             self.pub_raw = self.create_publisher(Image, raw_topic, 10)
+            self.pub_corner_raw = self.create_publisher(Image, corner_raw_topic, 10)
         else:
             self.pub_raw = None
+            self.pub_corner_raw = None
 
         self.get_logger().info(
             f"YoloNode initialized successfully.\n"
@@ -297,10 +308,11 @@ class YoloNode(Node):
 
     @staticmethod
     def get_sim_time(msg: Image) -> float:
-        return float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        return image_stamp_to_seconds(msg.header.stamp)
 
     def on_overhead_frame(self, msg: Image):
         try:
+            self.validate_camera_dimensions("overhead_camera", msg)
             bgr = self.to_bgr(msg)
             t = self.get_sim_time(msg)
             self.overhead_latest = (msg, bgr, t)
@@ -310,12 +322,23 @@ class YoloNode(Node):
 
     def on_corner_frame(self, msg: Image):
         try:
+            self.validate_camera_dimensions("corner_camera", msg)
             bgr = self.to_bgr(msg)
             t = self.get_sim_time(msg)
             self.corner_latest = (msg, bgr, t)
             self.try_step(t)
         except Exception as e:
             self.get_logger().error(f"Corner camera error: {e}", throttle_duration_sec=5.0)
+
+    def validate_camera_dimensions(self, cam_id: str, msg: Image):
+        configured = self.cameras_cfg[cam_id]
+        expected = (int(configured["width"]), int(configured["height"]))
+        actual = (int(msg.width), int(msg.height))
+        if actual != expected:
+            raise ValueError(
+                f"{cam_id} frame is {actual[0]}x{actual[1]}, but cameras.yaml "
+                f"calibration specifies {expected[0]}x{expected[1]}"
+            )
 
     def try_step(self, sim_time: float):
         """Execute inference, fusion, and tracking step throttled by max_fps."""
@@ -330,8 +353,9 @@ class YoloNode(Node):
 
     def detect_camera(self, cam_id: str, bgr: np.ndarray) -> List[dict]:
         """Run YOLO person detection on a single camera frame and project to ground."""
-        results = self.model(
-            bgr,
+        results = self.model.predict(
+            source=bgr,
+            imgsz=640,
             classes=[0],
             conf=self.conf,
             device=self.device,
@@ -348,14 +372,12 @@ class YoloNode(Node):
                 conf = float(confs[i])
 
                 ground_pt = self.projector.project_bbox(cam_id, (x1, y1, x2, y2))
-                if ground_pt is not None:
-                    gx, gy = ground_pt
-                    detections.append({
-                        "cam_id": cam_id,
-                        "bbox": (x1, y1, x2, y2),
-                        "conf": conf,
-                        "ground_pos": (gx, gy),
-                    })
+                detections.append({
+                    "cam_id": cam_id,
+                    "bbox": (x1, y1, x2, y2),
+                    "conf": conf,
+                    "ground_pos": ground_pt,
+                })
         return detections
 
     def process_cameras(self, current_time: float):
@@ -387,17 +409,19 @@ class YoloNode(Node):
             if self.corner_latest is not None
             else []
         )
+        ground_dets_overhead = [d for d in dets_overhead if d["ground_pos"] is not None]
+        ground_dets_corner = [d for d in dets_corner if d["ground_pos"] is not None]
 
         # Multi-camera fusion: merge detections within fusion_dist_thresh (~0.8m)
         fused_items: List[dict] = []
         matched_corner_indices = set()
 
-        for d_over in dets_overhead:
+        for d_over in ground_dets_overhead:
             p_over = d_over["ground_pos"]
             best_match_idx = None
             best_dist = self.fusion_dist_thresh
 
-            for idx_c, d_corn in enumerate(dets_corner):
+            for idx_c, d_corn in enumerate(ground_dets_corner):
                 if idx_c in matched_corner_indices:
                     continue
                 p_corn = d_corn["ground_pos"]
@@ -407,7 +431,7 @@ class YoloNode(Node):
                     best_match_idx = idx_c
 
             if best_match_idx is not None:
-                d_corn = dets_corner[best_match_idx]
+                d_corn = ground_dets_corner[best_match_idx]
                 matched_corner_indices.add(best_match_idx)
                 w1, w2 = d_over["conf"], d_corn["conf"]
                 total_w = w1 + w2
@@ -429,7 +453,7 @@ class YoloNode(Node):
                     "corner_box": None,
                 })
 
-        for idx_c, d_corn in enumerate(dets_corner):
+        for idx_c, d_corn in enumerate(ground_dets_corner):
             if idx_c not in matched_corner_indices:
                 fused_items.append({
                     "pos": d_corn["ground_pos"],
@@ -549,6 +573,8 @@ class YoloNode(Node):
                 "cameras_seen": trk["cameras_seen"],
                 "confidence": round(conf, 3),
                 "bbox": [round(float(v), 1) for v in bbox] if bbox is not None else None,
+                "classifier_samples": self.classifier.get_sample_count(gid, current_time),
+                "classifier_window_sec": self.classifier.window_sec,
             })
 
         # Contract: /person_activity
@@ -576,9 +602,15 @@ class YoloNode(Node):
         })
         self.pub_json.publish(json_msg)
 
-        # Annotated stream: side-by-side overhead + corner, each resized to 320x240 (total 640x240)
+        # Publish each camera independently at its native resolution.
         self.publish_annotated_stream(
-            frame_overhead, frame_corner, assigned_tracks, hdr_stamp
+            frame_overhead,
+            frame_corner,
+            dets_overhead,
+            dets_corner,
+            assigned_tracks,
+            self.overhead_latest[0].header.stamp if self.overhead_latest is not None else None,
+            self.corner_latest[0].header.stamp if self.corner_latest is not None else None,
         )
 
     def handle_goal_pose_emission(
@@ -610,10 +642,11 @@ class YoloNode(Node):
                 return
             final_x, final_y = nudged
         else:
-            if not self.warned_no_map:
-                self.get_logger().warn("No /map received yet; publishing unadjusted /goal_pose.")
-                self.warned_no_map = True
-            final_x, final_y = tx, ty
+            self.get_logger().warn(
+                f"No /map received yet; deferring /goal_pose for track {track_id}.",
+                throttle_duration_sec=5.0,
+            )
+            return
 
         # Publish PoseStamped
         goal_msg = PoseStamped()
@@ -640,10 +673,13 @@ class YoloNode(Node):
         self,
         frame_overhead: np.ndarray,
         frame_corner: np.ndarray,
+        dets_overhead: List[dict],
+        dets_corner: List[dict],
         assigned_tracks: List[dict],
-        hdr_stamp,
+        overhead_stamp,
+        corner_stamp,
     ):
-        """Compose side-by-side stream (overhead first, corner second) resized to 320x240 each."""
+        """Publish separately annotated native-resolution frames for both cameras."""
         # Visual color palette
         color_map = {
             "Walking": (0, 200, 0),
@@ -652,74 +688,75 @@ class YoloNode(Node):
             "Unknown": (128, 128, 128),
         }
 
-        # Annotate full-resolution frames before resizing
         annotated_over = frame_overhead.copy()
         annotated_corn = frame_corner.copy()
 
+        for frame, detections in (
+            (annotated_over, dets_overhead),
+            (annotated_corn, dets_corner),
+        ):
+            for detection in detections:
+                x1, y1, x2, y2 = [int(v) for v in detection["bbox"]]
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 2)
+
         for trk in assigned_tracks:
-            gid = trk["global_id"]
-            act = trk["activity"]
-            color = color_map.get(act, (200, 200, 200))
+            color = color_map.get(trk["activity"], (200, 200, 200))
             mx, my = trk.get("map_pos", (0.0, 0.0))
-            label = f"ID {gid}: {act} [{mx:.1f},{my:.1f}m]"
-
-            # Draw on overhead camera
-            if trk["overhead_box"] is not None:
-                x1, y1, x2, y2 = [int(v) for v in trk["overhead_box"]]
-                cv2.rectangle(annotated_over, (x1, y1), (x2, y2), color, 2)
-                (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                cv2.rectangle(annotated_over, (x1, max(0, y1 - lh - 6)), (x1 + lw + 6, y1), color, -1)
+            label = f"ID {trk['global_id']}: {trk['activity']} ({mx:.1f}, {my:.1f})m"
+            for frame, cam_id in (
+                (annotated_over, "overhead_camera"),
+                (annotated_corn, "corner_camera"),
+            ):
+                pixel = self.projector.project_world_to_pixel(
+                    cam_id, trk["pos"][0], trk["pos"][1], z=0.0
+                )
+                if pixel is None:
+                    continue
+                px, py = pixel
+                if not (0 <= px < frame.shape[1] and 0 <= py < frame.shape[0]):
+                    continue
+                cv2.drawMarker(
+                    frame, (px, py), (255, 0, 255), cv2.MARKER_CROSS, 18, 2
+                )
                 cv2.putText(
-                    annotated_over, label, (x1 + 3, max(lh + 2, y1 - 3)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA
+                    frame, label, (px + 8, max(18, py - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA
                 )
 
-            # Draw on corner camera
-            if trk["corner_box"] is not None:
-                x1, y1, x2, y2 = [int(v) for v in trk["corner_box"]]
-                cv2.rectangle(annotated_corn, (x1, y1), (x2, y2), color, 2)
-                (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                cv2.rectangle(annotated_corn, (x1, max(0, y1 - lh - 6)), (x1 + lw + 6, y1), color, -1)
-                cv2.putText(
-                    annotated_corn, label, (x1 + 3, max(lh + 2, y1 - 3)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA
-                )
-
-        # Header titles
-        cv2.putText(annotated_over, "Overhead (Top-Down)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(annotated_corn, "Corner Mount", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-        # Resize each to 320x240 so combined image is 640x240 (at most 640x480)
-        over_small = cv2.resize(annotated_over, (320, 240), interpolation=cv2.INTER_AREA)
-        corn_small = cv2.resize(annotated_corn, (320, 240), interpolation=cv2.INTER_AREA)
-
-        # Overhead view first, Corner view second
-        combined = np.hstack([over_small, corn_small])
-
-        # JPEG compression
-        success, enc = cv2.imencode(
-            ".jpg", combined, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
-        )
-        if success:
+        for frame, stamp, frame_id, compressed_pub, raw_pub in (
+            (
+                annotated_over, overhead_stamp, "overhead_camera_link",
+                self.pub_compressed, self.pub_raw,
+            ),
+            (
+                annotated_corn, corner_stamp, "corner_camera_link",
+                self.pub_corner_compressed, self.pub_corner_raw,
+            ),
+        ):
+            if stamp is None:
+                continue
+            try:
+                encoded = encode_native_jpeg(frame, self.jpeg_quality)
+            except RuntimeError as exc:
+                self.get_logger().error(f"JPEG encoding failed for {frame_id}: {exc}")
+                continue
             comp_msg = CompressedImage()
-            if hdr_stamp is not None:
-                comp_msg.header.stamp = hdr_stamp
-            comp_msg.header.frame_id = "overhead_camera_link"
+            comp_msg.header.stamp = stamp
+            comp_msg.header.frame_id = frame_id
             comp_msg.format = "jpeg"
-            comp_msg.data = enc.tobytes()
-            self.pub_compressed.publish(comp_msg)
+            comp_msg.data = encoded
+            compressed_pub.publish(comp_msg)
 
-        if self.publish_raw and self.pub_raw is not None:
-            raw_msg = Image()
-            if hdr_stamp is not None:
-                raw_msg.header.stamp = hdr_stamp
-            raw_msg.header.frame_id = "overhead_camera_link"
-            raw_msg.height, raw_msg.width = combined.shape[:2]
-            raw_msg.encoding = "bgr8"
-            raw_msg.is_bigendian = 0
-            raw_msg.step = int(combined.shape[1] * 3)
-            raw_msg.data = combined.tobytes()
-            self.pub_raw.publish(raw_msg)
+            if self.publish_raw and raw_pub is not None:
+                raw_msg = Image()
+                raw_msg.header.stamp = stamp
+                raw_msg.header.frame_id = frame_id
+                raw_msg.height, raw_msg.width = frame.shape[:2]
+                raw_msg.encoding = "bgr8"
+                raw_msg.is_bigendian = 0
+                raw_msg.step = int(frame.shape[1] * 3)
+                raw_msg.data = frame.tobytes()
+                raw_pub.publish(raw_msg)
 
 
 def main(args=None):

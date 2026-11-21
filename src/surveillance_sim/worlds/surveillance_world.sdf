@@ -226,7 +226,7 @@
       </link>
     </model>
 
-    <!-- Partition Wall (Central corridor separator) -->
+    <!-- Partition Wall (Central corridor separator)
     <model name="partition_wall">
       <static>true</static>
       <pose>0 -2.0 1.0 0 0 0</pose>
@@ -250,7 +250,7 @@
           </material>
         </visual>
       </link>
-    </model>
+    </model> -->
 
     <!-- Storage Crate Obstacle 1 (South-West) -->
     <model name="crate_sw">

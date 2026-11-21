@@ -3,7 +3,7 @@
 
 Validates:
 1. /surveillance_camera/image_raw frequency (~30 Hz)
-2. /yolo/annotated/compressed dimensions (<= 640x480) and rate (<= 10 Hz)
+2. Both independent /yolo annotated streams are 640x480 JPEG and <= 10 Hz
 3. /person_activity values (strictly 'Walking', 'Running', 'Staying'; absent when occluded)
 4. /goal_pose emission (frame_id 'map', fired once during staying, cooldown obeyed)
 5. Overhead camera person detection at conf 0.15
@@ -46,7 +46,8 @@ class VerificationCollector(Node):
 
         # Data collection structures
         self.surveillance_cam_times = []
-        self.compressed_frames = []  # (sim_time, width, height, nbytes)
+        self.compressed_frames = []
+        self.corner_compressed_frames = []
         self.activity_msgs = []       # (sim_time, data)
         self.goal_poses = []          # (sim_time, frame_id, x, y, z, w)
         self.json_records = []
@@ -59,6 +60,10 @@ class VerificationCollector(Node):
         )
         self.sub_compressed = self.create_subscription(
             CompressedImage, "/yolo/annotated/compressed", self.on_compressed, 10
+        )
+        self.sub_corner_compressed = self.create_subscription(
+            CompressedImage, "/yolo/corner/annotated/compressed",
+            self.on_corner_compressed, 10
         )
         self.sub_act = self.create_subscription(
             String, "/person_activity", self.on_activity, 10
@@ -80,15 +85,20 @@ class VerificationCollector(Node):
         self.surveillance_cam_times.append(t)
 
     def on_compressed(self, msg: CompressedImage):
+        self.collect_compressed(self.compressed_frames, msg)
+
+    def on_corner_compressed(self, msg: CompressedImage):
+        self.collect_compressed(self.corner_compressed_frames, msg)
+
+    def collect_compressed(self, frames, msg: CompressedImage):
         t = self.get_sim_time(msg.header.stamp)
-        # Decode JPEG header to get shape
         np_arr = np.frombuffer(msg.data, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if img is not None:
             h, w = img.shape[:2]
         else:
             h, w = 0, 0
-        self.compressed_frames.append((t, w, h, len(msg.data)))
+        frames.append((t, w, h, len(msg.data), msg.format))
 
     def on_activity(self, msg: String):
         sim_now = self.surveillance_cam_times[-1] if self.surveillance_cam_times else 0.0
@@ -223,22 +233,25 @@ def run_verification(target_sim_sec: float = 60.0):
     else:
         print("1. Overhead Camera /surveillance_camera/image_raw: NO FRAMES RECEIVED!")
 
-    # 2. /yolo/annotated/compressed rate and dimensions
-    cf = collector.compressed_frames
-    if len(cf) >= 2:
-        comp_duration = cf[-1][0] - cf[0][0]
-        comp_hz = (len(cf) - 1) / comp_duration if comp_duration > 0 else 0
-        widths = [f[1] for f in cf]
-        heights = [f[2] for f in cf]
-        max_w, max_h = max(widths), max(heights)
-        avg_kb = (sum(f[3] for f in cf) / len(cf)) / 1024.0
-        print(f"2. Compressed Stream /yolo/annotated/compressed:")
-        print(f"   Frames received: {len(cf)} over {comp_duration:.2f} sim seconds")
-        print(f"   Rate: {comp_hz:.2f} Hz (Contract: <= 10 fps)")
-        print(f"   Resolution: max {max_w}x{max_h} (Contract: <= 640x480)")
-        print(f"   Average Frame Size: {avg_kb:.1f} KB (JPEG quality ~70)")
-    else:
-        print("2. Compressed Stream: NO FRAMES RECEIVED!")
+    # 2. Both independent compressed streams
+    for topic, frames in (
+        ("/yolo/annotated/compressed", collector.compressed_frames),
+        ("/yolo/corner/annotated/compressed", collector.corner_compressed_frames),
+    ):
+        if len(frames) >= 2:
+            duration = frames[-1][0] - frames[0][0]
+            hz = (len(frames) - 1) / duration if duration > 0 else 0
+            max_w = max(frame[1] for frame in frames)
+            max_h = max(frame[2] for frame in frames)
+            avg_kb = (sum(frame[3] for frame in frames) / len(frames)) / 1024.0
+            formats = sorted(set(frame[4] for frame in frames))
+            print(f"2. Compressed Stream {topic}:")
+            print(f"   Frames received: {len(frames)} over {duration:.2f} sim seconds")
+            print(f"   Rate: {hz:.2f} Hz (Contract: <= 10 fps)")
+            print(f"   Resolution: max {max_w}x{max_h} (expected native 640x480)")
+            print(f"   Format: {formats}; average size: {avg_kb:.1f} KB")
+        else:
+            print(f"2. Compressed Stream {topic}: NO FRAMES RECEIVED!")
 
     # 3. /person_activity values
     act_msgs = collector.activity_msgs

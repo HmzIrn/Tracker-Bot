@@ -4,6 +4,7 @@ overhead_camera:
   width: 640
   height: 480
   hfov: 1.50
+  plane_z: 1.5
   ground_point: "center"
 
 corner_camera:
@@ -12,6 +13,7 @@ corner_camera:
   width: 640
   height: 480
   hfov: 1.05
+  plane_z: 0.0
   ground_point: "bottom_center"
 
 goal_pose:

@@ -1,8 +1,10 @@
-"""Unit tests for ground projection onto the z=0 floor plane."""
+"""Unit tests for camera-configured horizontal-plane projection."""
 
 import math
 import os
 import sys
+
+import pytest
 
 # Ensure local module directory is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
@@ -62,6 +64,38 @@ def test_overhead_camera_projection():
     assert res_up[1] > 0.0
 
 
+def test_nonzero_projection_plane_and_waypoint_round_trips():
+    """Check overhead plane_z and map-coordinate error at the center and a wall waypoint."""
+    configs = {
+        "overhead": {
+            "pose": [0.0, 0.0, 12.2, 0.0, 1.5708, 1.5708],
+            "width": 640, "height": 480, "hfov": 1.50,
+            "plane_z": 1.5, "ground_point": "center",
+        },
+        "corner": {
+            "pose": [-7.0, -7.0, 2.3, 0.0, 0.25, 0.7854],
+            "width": 640, "height": 480, "hfov": 1.05,
+            "plane_z": 0.0, "ground_point": "bottom_center",
+        },
+    }
+    projector = GroundProjector(configs)
+    test_points = (
+        ("overhead", (0.0, 0.0, 1.5)),
+        ("corner", (0.5, 4.5, 0.0)),
+    )
+    errors = []
+    for cam_id, (x, y, z) in test_points:
+        pixel = projector.project_world_to_pixel(cam_id, x, y, z)
+        assert pixel is not None
+        estimate = projector.project(cam_id, *pixel)
+        assert estimate is not None
+        error = math.hypot(estimate[0] - x, estimate[1] - y)
+        errors.append(error)
+        assert error < 0.1
+
+    assert errors[0] == pytest.approx(0.0, abs=1e-3)
+
+
 def test_sky_ray_returns_none():
     """Verify that a ray pointing above the horizon does not intersect the ground."""
     # Horizontal camera (pitch=0), top pixel (v=0) points upward into the sky
@@ -78,6 +112,7 @@ def test_ground_projector_class():
             "width": 640,
             "height": 480,
             "hfov": 1.50,
+            "plane_z": 1.5,
             "ground_point": "center",
         },
         "corner": {
@@ -85,6 +120,7 @@ def test_ground_projector_class():
             "width": 640,
             "height": 480,
             "hfov": 1.05,
+            "plane_z": 0.0,
             "ground_point": "bottom_center",
         },
     }

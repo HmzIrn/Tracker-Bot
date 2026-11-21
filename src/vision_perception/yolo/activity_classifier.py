@@ -27,7 +27,7 @@ class ActivityClassifier:
 
     def __init__(
         self,
-        window_sec: float = 1.0,
+        window_sec: float = 2.0,
         staying_thresh: float = 0.3,
         running_thresh: float = 1.75,
         smoothing_n: int = 5,
@@ -147,6 +147,14 @@ class ActivityClassifier:
             t = self.tracks[track_id]
             return t.current_activity, t.current_speed
         return None
+
+    def get_sample_count(self, track_id: int, timestamp: float) -> int:
+        """Return the number of observations for a track inside the current window."""
+        track = self.tracks.get(track_id)
+        if track is None:
+            return 0
+        cutoff = timestamp - self.window_sec
+        return sum(1 for t, _, _ in track.history if cutoff <= t <= timestamp)
 
     def reset(self):
         """Clear all tracks."""

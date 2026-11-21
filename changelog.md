@@ -4,6 +4,55 @@ All notable changes and verification outcomes are documented in this file.
 
 ## [Milestone 11] - 2026-11-20: Flutter Dashboard Integration Contract
 
+### Addendum A1: Separate Native-Resolution Annotated Streams
+- Replaced the side-by-side composite with independent overhead `/yolo/annotated/compressed` and corner `/yolo/corner/annotated/compressed` JPEG streams. Both retain native frames, use quality 75, and are capped at 10 fps; optional raw outputs are separate and disabled by default.
+- YOLO receives each camera's own frame via `predict(imgsz=640)` without sharing a persistent tracker. Each stream draws its camera's native detection boxes plus projected global-track markers and labels.
+- Updated the stream contract tests, `context.md`, and `docs/INTEGRATION_NOTES.md`.
+- Checkpoint: `colcon build --symlink-install` passed; perception pytest suite **24 passed**. Simulation output verification is deferred to the requested A2/A4 measurement run.
+
+### Addendum A2: Overhead Detection Experiment
+- Captured and retained actor-visible native frames at sim stamp 3.0 s: `a2_overhead_frame.jpg` and `a2_corner_frame.jpg`. Approximate actor extent in the source frames: overhead **~15x16 px**; corner **~14x80 px** (partially occluded by the partition).
+- Ran YOLOv8n/s/m on CPU at `imgsz` 640/960/1280 and `conf=0.15`; all overhead results were zero detections. Corner detections were:
+
+  | Model | 640 | 960 | 1280 |
+  | :--- | :--- | :--- | :--- |
+  | YOLOv8n | 0 | 1 (`0.211`, 13.1x55.0 px) | 1 (`0.419`, 14.0x56.3 px) |
+  | YOLOv8s | 0 | 1 (`0.228`, 12.9x55.8 px) | 2 (`0.471`, 13.5x55.8 px; `0.334`, 13.0x80.6 px) |
+  | YOLOv8m | 0 | 0 | 1 (`0.399`, 14.1x54.6 px) |
+- The single headless run collected **42.87 sim seconds** before the 110 s wall-time guard, short of 60 sim seconds. No camera resolution or model default was changed. The overhead detector's failure supports A1's projected corner-track markers.
+- Checkpoint: `colcon build --symlink-install` passed; perception pytest suite **24 passed**.
+
+### Addendum A3: Per-Camera Projection Calibration
+- Added `plane_z` to camera configuration: overhead **1.5 m** with `center`; corner **0.0 m** with `bottom_center`. Pixel-ray intersection now uses the configured plane.
+- Intrinsics are required from YAML rather than embedded fallback values. `yolo_node` validates incoming dimensions; the SDF drift test now compares pose, HFOV (1.50/1.05 rad), and resolution (640x480) for both cameras.
+- Round-trip calibration against room-center `(0, 0)` and near-wall `(0.5, 4.5)` waypoints gives pixel-quantization errors of **0.00004 m** overhead at center and **0.06817 m** corner near the wall.
+- Checkpoint: `colcon build --symlink-install` passed; perception pytest suite **25 passed**.
+
+### Addendum A4: Classifier Sampling Experiment
+- The 42.07 sim-second telemetry run at `max_fps=2.0`, `window_sec=1.0` produced **33 tracked updates** across tracks 1-6. In a 1.0 s window, sample counts were min/median/max **1/3/4**, with **11/33** updates below `min_samples=3`.
+- Increased the default window to **2.0 s**; `staying_thresh=0.3` and `running_thresh=1.75` were unchanged. A replay of the same track positions had min/median/max samples **1/5/6**, with **9/33** below three.
+- Confusion matrix (rows = known actor state; columns = predicted Staying / Walking / Running / Unknown):
+
+  | Window | Staying | Walking | Running |
+  | :--- | :--- | :--- | :--- |
+  | 1.0 s | 0 / 0 / 0 / 2 | 0 / 8 / 0 / 5 | 0 / 15 / 1 / 2 |
+  | 2.0 s replay | 0 / 0 / 0 / 2 | 0 / 8 / 0 / 5 | 0 / 16 / 0 / 2 |
+
+- The replay reduces sample starvation but does not improve the confusion matrix; further threshold tuning is deferred. At `max_fps=2.0`, 104 telemetry records over 42.07 sim seconds is **2.47 Hz simulated**; measured RTF was approximately **0.5**. Processing was CPU-limited, so `max_fps` remains 2 rather than being raised toward 5.
+- PyTorch reports CUDA build **13.0**, while the available WSL driver reports capability **12.5**; `torch.cuda.is_available()` is false. A compatible newer driver for the Quadro P1000 or a PyTorch CUDA wheel built for a driver-supported runtime (and Pascal GPU) may resolve this; nothing was installed.
+- Checkpoint: `colcon build --symlink-install` passed; perception pytest suite **26 passed**.
+
+### Addendum A5: Goal Pose Deferral and Map Indexing
+- `/goal_pose` is no longer published without `/map`. The Staying episode remains unfired, cooldown is untouched, and image callbacks retry while the track remains Staying; the missing-map warning is throttled to 5 s.
+- Dwell and cooldown continue to use camera image header stamps via a ROS-independent timestamp conversion helper. Tests cover a frozen node clock, retry without `mark_fired`, and cooldown behavior.
+- Confirmed free-space indexing uses map origin, resolution, width/height, and row-major cell order. Added a non-zero-origin, 0.2 m resolution test; map origin yaw is assumed zero.
+- Checkpoint: `colcon build --symlink-install` passed; perception pytest suite **29 passed**.
+
+### Addendum A6: Results and Open Decisions
+- Added the A1-A5 measurements, A2 detection table, known limitations, and decision points to `docs/INTEGRATION_NOTES.md`. No out-of-scope packages or robot integrations were changed.
+- Final verification after all code changes: `colcon build --symlink-install` passed; full workspace `pytest -q` **58 passed**; changed Python modules passed `py_compile`.
+- The headless capture reached 42.87 simulated seconds before the wall-time guard (RTF approximately 0.5); this limitation and the remaining empirical calibration/map decisions are documented.
+
 ### Step 4: /goal_pose Publisher
 - Added goal pose configuration to `config/cameras.yaml` (`staying_dwell_sec: 5.0`, `goal_cooldown_sec: 15.0`, `world_to_map: [0.0, 0.0, 0.0]`), declared in `yolo_node` with runtime ROS parameter override support.
 - Implemented `GoalPoseManager` logic: emits a single `geometry_msgs/msg/PoseStamped` on `/goal_pose` (frame "map", z=0, w=1.0) when a tracked person dwells in "Staying" continuously for >= 5.0 seconds (sim time). Uses median projected floor coordinates over the dwelling window, transformed by `world_to_map`.

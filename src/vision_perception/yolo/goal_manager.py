@@ -9,6 +9,11 @@ import math
 from typing import List, Optional, Sequence, Set, Tuple
 
 
+def image_stamp_to_seconds(stamp) -> float:
+    """Convert a ROS image header stamp to seconds without consulting node time."""
+    return float(stamp.sec) + float(stamp.nanosec) * 1e-9
+
+
 def transform_world_to_map(
     wx: float, wy: float, world_to_map: Sequence[float]
 ) -> Tuple[float, float]:

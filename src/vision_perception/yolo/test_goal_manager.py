@@ -3,11 +3,17 @@
 import math
 import os
 import sys
+from types import SimpleNamespace
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
-from goal_manager import GoalPoseManager, transform_world_to_map, nudge_to_free_space
+from goal_manager import (
+    GoalPoseManager,
+    image_stamp_to_seconds,
+    transform_world_to_map,
+    nudge_to_free_space,
+)
 
 
 def test_transform_world_to_map():
@@ -42,6 +48,37 @@ def test_dwell_timing_and_once_per_episode():
     for t in [5.5, 6.0, 8.0, 10.0]:
         goal = mgr.update_track(track_id=1, activity="Staying", world_pos=(1.0, 2.0), sim_time=t)
         assert goal is None
+
+
+def test_image_stamps_drive_dwell_and_cooldown_with_frozen_node_clock():
+    mgr = GoalPoseManager(staying_dwell_sec=5.0, goal_cooldown_sec=15.0)
+    frozen_node_clock = 123.0
+
+    def image_stamp(seconds):
+        return image_stamp_to_seconds(SimpleNamespace(sec=seconds, nanosec=0))
+
+    for image_seconds in (10, 12, 14):
+        image_time = image_stamp(image_seconds)
+        assert frozen_node_clock == 123.0
+        goal = mgr.update_track(1, "Staying", (1.0, 2.0), image_time)
+        assert goal is None
+    goal = mgr.update_track(1, "Staying", (1.0, 2.0), image_stamp(15))
+    assert goal is not None
+    mgr.mark_fired(1, image_stamp(15))
+
+    mgr.update_track(2, "Staying", (3.0, 4.0), image_stamp(16))
+    assert mgr.update_track(2, "Staying", (3.0, 4.0), image_stamp(21)) is None
+    assert mgr.update_track(2, "Staying", (3.0, 4.0), image_stamp(29)) is None
+    assert mgr.update_track(2, "Staying", (3.0, 4.0), image_stamp(30)) is not None
+
+
+def test_staying_episode_remains_armed_without_goal_publish():
+    mgr = GoalPoseManager(staying_dwell_sec=5.0, goal_cooldown_sec=15.0)
+    mgr.update_track(7, "Staying", (2.0, 3.0), 0.0)
+    assert mgr.update_track(7, "Staying", (2.0, 3.0), 5.0) is not None
+    # No mark_fired call models the missing-map deferral in the ROS node.
+    assert mgr.update_track(7, "Staying", (2.0, 3.0), 5.5) is not None
+    assert mgr.last_goal_time == -1e9
 
 
 def test_cooldown_between_episodes():
@@ -132,3 +169,20 @@ def test_free_space_nudging():
     all_occupied = [100] * 100
     res_none = nudge_to_free_space(0.55, 0.55, all_occupied, 10, 10, 0.1, 0.0, 0.0, max_radius=0.5)
     assert res_none is None
+
+
+def test_free_space_nudge_uses_nonzero_origin_and_resolution():
+    width, height, resolution = 8, 7, 0.2
+    origin_x, origin_y = -1.0, 2.0
+    grid = [0] * (width * height)
+    occupied_ix, occupied_iy = 3, 2
+    grid[occupied_iy * width + occupied_ix] = 100
+    target_x = origin_x + (occupied_ix + 0.5) * resolution
+    target_y = origin_y + (occupied_iy + 0.5) * resolution
+
+    result = nudge_to_free_space(
+        target_x, target_y, grid, width, height, resolution,
+        origin_x, origin_y, max_radius=0.5,
+    )
+
+    assert result == pytest.approx((origin_x + 4.5 * resolution, target_y))

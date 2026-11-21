@@ -29,6 +29,16 @@ def test_min_history_unknown():
     assert act == "Unknown"
 
 
+def test_sample_count_uses_configured_window():
+    clf = ActivityClassifier(window_sec=2.0, min_samples=3)
+    assert clf.get_sample_count(1, 0.0) == 0
+
+    for t in (0.0, 0.5, 1.0, 2.1):
+        clf.update(track_id=1, world_pos=(0.0, 0.0), timestamp=t)
+
+    assert clf.get_sample_count(1, 2.1) == 3
+
+
 def test_stationary_is_staying():
     """Verify that a stationary track classifies as Staying."""
     clf = ActivityClassifier(

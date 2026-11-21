@@ -54,8 +54,8 @@ def find_yaml_file() -> str:
     return ""
 
 
-def test_camera_poses_match_sdf():
-    """Verify that camera poses in cameras.yaml match surveillance_world.sdf poses."""
+def test_camera_calibration_matches_sdf():
+    """Verify YAML camera poses and intrinsics match surveillance_world.sdf."""
     sdf_path = find_sdf_file()
     if not sdf_path:
         pytest.skip("surveillance_world.sdf not found in workspace or install")
@@ -74,20 +74,29 @@ def test_camera_poses_match_sdf():
     world = root.find("world") if root.tag != "world" else root
     assert world is not None, "World tag not found in SDF"
 
-    sdf_poses = {}
+    sdf_cameras = {}
     for model in world.findall("model"):
         m_name = model.get("name")
         pose_elem = model.find("pose")
         if pose_elem is not None and pose_elem.text:
             coords = [float(v) for v in pose_elem.text.strip().split()]
-            sdf_poses[m_name] = coords
+            camera = model.find(".//sensor[@type='camera']/camera")
+            if camera is not None:
+                sdf_cameras[m_name] = {
+                    "pose": coords,
+                    "hfov": float(camera.findtext("horizontal_fov")),
+                    "width": int(camera.findtext("image/width")),
+                    "height": int(camera.findtext("image/height")),
+                }
 
     for cam_name in ["overhead_camera", "corner_camera"]:
         assert cam_name in cam_yaml, f"Expected {cam_name} in cameras.yaml"
-        assert cam_name in sdf_poses, f"Expected {cam_name} model in {sdf_path}"
+        assert cam_name in sdf_cameras, f"Expected {cam_name} camera in {sdf_path}"
 
-        yaml_pose = [float(v) for v in cam_yaml[cam_name]["pose"]]
-        sdf_pose = sdf_poses[cam_name]
+        yaml_camera = cam_yaml[cam_name]
+        sdf_camera = sdf_cameras[cam_name]
+        yaml_pose = [float(v) for v in yaml_camera["pose"]]
+        sdf_pose = sdf_camera["pose"]
 
         assert len(yaml_pose) == 6, f"{cam_name} pose in YAML should have 6 values"
         assert len(sdf_pose) == 6, f"{cam_name} pose in SDF should have 6 values"
@@ -96,3 +105,7 @@ def test_camera_poses_match_sdf():
             assert yp == pytest.approx(sp, abs=1e-3), (
                 f"{cam_name} pose index {i} mismatch: YAML={yp} vs SDF={sp}"
             )
+
+        assert float(yaml_camera["hfov"]) == pytest.approx(sdf_camera["hfov"], abs=1e-4)
+        assert int(yaml_camera["width"]) == sdf_camera["width"]
+        assert int(yaml_camera["height"]) == sdf_camera["height"]

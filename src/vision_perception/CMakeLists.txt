@@ -21,6 +21,7 @@ install(PROGRAMS
 
 install(PROGRAMS
   yolo/activity_classifier.py
+  yolo/annotated_stream.py
   yolo/ground_projection.py
   yolo/goal_manager.py
   DESTINATION lib/${PROJECT_NAME}
