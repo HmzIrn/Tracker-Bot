@@ -226,31 +226,7 @@
       </link>
     </model>
 
-    <!-- Partition Wall (Central corridor separator)
-    <model name="partition_wall">
-      <static>true</static>
-      <pose>0 -2.0 1.0 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>4.0 0.2 2.0</size>
-            </box>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>4.0 0.2 2.0</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.6 0.6 0.6 1</ambient>
-            <diffuse>0.6 0.6 0.6 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model> -->
+    <!-- The partition was removed because it occluded the actor from the corner camera. Build any map from this final, unobstructed world. -->
 
     <!-- Storage Crate Obstacle 1 (South-West) -->
     <model name="crate_sw">
@@ -414,46 +390,53 @@
             <pose>0.0 0.0 1.0 0 0 0.7854</pose>
           </waypoint>
         </trajectory>
-        <!-- State 2: WALK (Walking along midground corridor at ~1.0 m/s) -->
+        <!-- Walking approach -->
         <trajectory id="1" type="walk">
           <waypoint>
             <time>12.0</time>
             <pose>0.0 0.0 1.0 0 0 0.7854</pose>
           </waypoint>
           <waypoint>
-            <time>15.5</time>
-            <pose>2.5 2.5 1.0 0 0 0.7854</pose>
+            <time>16.0</time>
+            <pose>0.0 3.5 1.0 0 0 0.0</pose>
+          </waypoint>
+        </trajectory>
+        <!-- Run 9.3 m along a clear, corner-camera-visible path in 3 s. -->
+        <trajectory id="2" type="run">
+          <waypoint>
+            <time>16.0</time>
+            <pose>0.0 3.5 1.0 0 0 0.0</pose>
           </waypoint>
           <waypoint>
-            <time>16.5</time>
-            <pose>2.5 2.5 1.0 0 0 2.356</pose>
+            <time>16.833333</time>
+            <pose>2.5 3.5 1.0 0 0 -1.5708</pose>
           </waypoint>
           <waypoint>
             <time>19.0</time>
-            <pose>0.5 4.5 1.0 0 0 2.356</pose>
-          </waypoint>
-          <waypoint>
-            <time>20.0</time>
-            <pose>0.5 4.5 1.0 0 0 -2.356</pose>
+            <pose>2.5 -3.3 1.0 0 0 -1.5708</pose>
           </waypoint>
         </trajectory>
-        <!-- State 3: RUN (Running across the room at ~2.5 m/s back to origin) -->
-        <trajectory id="2" type="run">
+        <!-- Walking return; the cycle closes at the idle point at 27 s. -->
+        <trajectory id="3" type="walk">
           <waypoint>
-            <time>20.0</time>
-            <pose>0.5 4.5 1.0 0 0 -2.356</pose>
+            <time>19.0</time>
+            <pose>2.5 -3.3 1.0 0 0 1.5708</pose>
           </waypoint>
           <waypoint>
-            <time>22.5</time>
-            <pose>-2.5 1.5 1.0 0 0 -2.356</pose>
+            <time>22.0</time>
+            <pose>2.5 0.0 1.0 0 0 3.1416</pose>
           </waypoint>
           <waypoint>
-            <time>23.5</time>
-            <pose>-2.5 1.5 1.0 0 0 -0.5236</pose>
+            <time>23.0</time>
+            <pose>1.5 0.0 1.0 0 0 1.5708</pose>
           </waypoint>
           <waypoint>
-            <time>26.0</time>
-            <pose>0.0 0.0 1.0 0 0 -0.5236</pose>
+            <time>24.25</time>
+            <pose>1.5 1.25 1.0 0 0 3.1416</pose>
+          </waypoint>
+          <waypoint>
+            <time>25.75</time>
+            <pose>0.0 1.25 1.0 0 0 -1.5708</pose>
           </waypoint>
           <waypoint>
             <time>27.0</time>

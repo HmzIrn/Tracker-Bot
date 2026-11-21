@@ -53,6 +53,68 @@ All notable changes and verification outcomes are documented in this file.
 - Final verification after all code changes: `colcon build --symlink-install` passed; full workspace `pytest -q` **58 passed**; changed Python modules passed `py_compile`.
 - The headless capture reached 42.87 simulated seconds before the wall-time guard (RTF approximately 0.5); this limitation and the remaining empirical calibration/map decisions are documented.
 
+### Follow-up F1: End-to-end `/goal_pose` verification
+- With a transient-local free test map (origin `(-5,-5)`, resolution `0.1 m`, `100x100`) over 55 simulated seconds, exactly one valid goal was observed in each of the two idle episodes. Both were within 0.14 m of the `(0,0)` idle position and had the required `map` frame and pose fields. A separate 43-second run without the map helper produced zero goals and throttled missing-map warnings.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **58 passed**.
+
+### Follow-up F2: Actor waypoint speed comparison
+- Calculated waypoint speeds are idle **0**, walk **1.010/1.131 m/s**, and run-trajectory **1.697/1.166 m/s**. With thresholds 0.3/1.75 m/s, all moving segments are above Staying but below Running. No speed or threshold was changed.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **58 passed**.
+
+### Follow-up F3: Corner-camera recall
+- Across 55 unoccluded frames from two actor cycles, v8n/v8s at imgsz 640/960 each detected the actor in **55/55** frames. Mean actor height was **80.95 px** (range 63–94); CPU mean/median per frame was **115.3/58.6 ms** (v8n-640), **156.1/151.5 ms** (v8s-640), **143.0/133.9 ms** (v8n-960), and **354.9/350.3 ms** (v8s-960). Recommendation: retain v8n-640 pending broader data. Unlike the occluded A2 sample, the current SDF has its central partition commented out.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **58 passed**.
+
+### Follow-up F4: Rates and temporary 15 Hz camera test
+- At the 30 Hz source rate, measured RTF was **0.763**; the temporary 15 Hz world copy measured **0.826** (+8.3%). Sim-time inference/annotated rates shifted from about **2.47 Hz** to **2.22 Hz**; wall-time rates remained about **1.95/1.91 Hz**. `max_fps` is wall-clock limited, so sim-time Hz scales approximately inversely with RTF. The source SDF was not changed; ask before making this permanent.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **58 passed**.
+
+### Follow-up F5: Consolidated report
+- Added F1-F4 measurements, conclusions, and open decisions to `docs/INTEGRATION_NOTES.md`. Hardened the non-installed measurement runner to initialize its recorder on domain 30 and use compatible sensor/clock QoS. No GPU software was installed; PyTorch `2.14.1+cu130` is incompatible with the observed WSL driver capability `12.5`, so the P1000 requires a supported driver/runtime pairing or compatible CUDA wheel.
+- Final checkpoint: `colcon build --symlink-install` passed; full workspace `pytest -q` **58 passed**. No persistent SDF rate change was made.
+
+### Close-out H1: Freeze the partition-free world
+- Replaced the commented-out partition model with a concise note explaining the corner-camera occlusion and requiring maps to match the final world. Documented the perimeter walls, two pillars, two crates, cameras, actor, and absent partition.
+- After `colcon build --symlink-install`, the installed SDF was byte-identical to source and contained no active `partition_wall` model. Checkpoint: workspace `pytest -q` **58 passed**.
+
+### Close-out H2: Raise actor run speed and protect tracking
+- Kept the 12 s idle, 27 s cycle, and `running_thresh=1.75`. Walk speeds are **0.875/1.100/1.000/1.000/1.000/1.000 m/s**; run segments are **3.000/3.138 m/s** (overall **3.100 m/s**). Added a per-track gate `max(1.5 m, 4.0 m/s * age)` and a replay at the measured 2.47 Hz sim-time rate with **0 ID restarts**. The actor path test checks sampled clearance and camera frustum; visual gait review follows in H4.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **68 passed**.
+
+### Close-out H3: Register the workspace with ROS 2
+- The requested old and new package names are both `surveillance_sim`; no directory/package rename was applicable. Confirmed one `surveillance_sim` entry in `ros2 pkg list`, the `vision_perception yolo_node` executable, and launch argument resolution from a shell sourcing only `~/.survellence_sim.bash`.
+- Removed generated `build/surveillance_sim`, `install/surveillance_sim`, and root `log/` before a clean `colcon build --symlink-install`; both packages rebuilt successfully. Added `scripts/register_with_ros.sh` with `--no-build` and reversible `--remove`; it does not set `ROS_DOMAIN_ID`. Two registrations preserved `.bashrc` and the registration file byte-for-byte; removal restored the pre-registration backup, and re-registration passed the fresh-shell checks.
+- Added the Linux/Windows VS Code registration task and LF policy for shell scripts. Updated both YOLO task variants to run `vision_perception yolo_node` directly; `run_sim.ps1` already referenced the requested package name and needed no change.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **68 passed**.
+
+### Close-out H4: Revalidate three actor cycles
+- From a shell sourcing only `~/.survellence_sim.bash`, ran the headless world with `bridge_clock:=true`, the transient-local test map, and bare `ros2 run vision_perception yolo_node`. The recorder reached **81.016 sim s / 120.190 wall s (RTF 0.674)**; `/clock` and camera-header spans differed by only **0.063 s**.
+- Exactly **3** goals were recorded, at sim **11.683/35.377/61.678 s**, one during each 12 s idle interval. All had `frame_id=map`, `z=0`, `w=1`, and map positions within **0.14 m** of `(0,0)`. Reused F1's 43 sim-second no-map run: **0 goals**.
+- Confusion counts use the closest tracked entry to the SDF actor position; columns are Staying / Walking / Running / Unknown:
+
+  | Ground-truth segment | Staying | Walking | Running | Unknown |
+  | :--- | ---: | ---: | ---: | ---: |
+  | Idle | 67 | 15 | 0 | 2 |
+  | Walk in | 14 | 18 | 0 | 0 |
+  | Run | 0 | 15 | 4 | 6 |
+  | Walk return | 0 | 58 | 9 | 0 |
+
+- Corner detections appeared in **208/210** inference samples (**99.0%**); two idle samples had no tracked entry. The nearest-actor ID changed **5** times across the three cycles; **9** inference samples contained multiple IDs. The 100 `/person_activity` messages used only the three allowed labels (41 Staying, 51 Walking, 8 Running); average rate was **1.335 Hz simulated / 0.902 Hz wall**. Thus it meets 1-10 Hz on sim time, but is just below 1 Hz if interpreted as a wall-time requirement.
+- Both annotated topics published JPEG at **640x480** (configured quality 75): overhead **209** messages at **1.872 wall / 2.754 sim Hz**; corner **210** at **1.874 wall / 2.590 sim Hz**. Camera inputs measured **11.557/17.145 Hz wall/sim** overhead and **3.624/5.377 Hz** corner; inference was **1.874/2.588 Hz**.
+- Sampled run-clip frames show visible foot glide at the 3.0-3.14 m/s actor speed; this is qualitative, not a contact-point measurement. No trajectory or animation tuning was made. Open decision: confirm whether `/person_activity`'s 1 Hz minimum is wall-time or sim-time for the app.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **68 passed**.
+
+### Close-out H5: Refresh integration documentation
+- Rewrote `context.md` to reflect the split `surveillance_sim`/`vision_perception` packages, current partition-free world and 27 s route, camera calibration, ROS contracts, registration, and current runtime limitations.
+- Reworked `docs/INTEGRATION_NOTES.md` to remove the obsolete wrapper/robot-launch material and duplicate section numbering; added setup requirements, the exact registration task/file names, yaw-zero map guidance and example, and the H4 confusion/rate/goal results. Kept valid A2 image links and labeled pre-H2 measurements as historical.
+- Checked both Markdown files for stale robot/partition references and broken relative links.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **68 passed**.
+
+### Close-out H6: Validate a clean clone
+- Added ignore rules for local measurement, frame, and experiment output directories; existing build/install/log, Python cache, and model-weight rules remain in effect.
+- Assembled a temporary clone from `HEAD`, tracked worktree changes, and explicit copies of the untracked source files, excluding generated captures. In that clone, `colcon build --symlink-install` built both packages, `pytest -q` passed **68 tests**, and `register_with_ros.sh --no-build` resolved the expected packages, executable, and launch arguments. Restored registration to the primary workspace afterward.
+- Checkpoint: clean-clone build passed; clean-clone pytest **68 passed**; clean-clone ROS registration passed.
+
 ### Step 4: /goal_pose Publisher
 - Added goal pose configuration to `config/cameras.yaml` (`staying_dwell_sec: 5.0`, `goal_cooldown_sec: 15.0`, `world_to_map: [0.0, 0.0, 0.0]`), declared in `yolo_node` with runtime ROS parameter override support.
 - Implemented `GoalPoseManager` logic: emits a single `geometry_msgs/msg/PoseStamped` on `/goal_pose` (frame "map", z=0, w=1.0) when a tracked person dwells in "Staying" continuously for >= 5.0 seconds (sim time). Uses median projected floor coordinates over the dwelling window, transformed by `world_to_map`.

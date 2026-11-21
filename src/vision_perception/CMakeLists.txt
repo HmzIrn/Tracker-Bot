@@ -24,6 +24,7 @@ install(PROGRAMS
   yolo/annotated_stream.py
   yolo/ground_projection.py
   yolo/goal_manager.py
+  yolo/tracking.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

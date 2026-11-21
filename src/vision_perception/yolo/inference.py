@@ -71,6 +71,7 @@ from goal_manager import (
     transform_world_to_map,
 )
 from ground_projection import GroundProjector
+from tracking import association_candidates
 
 import rclpy
 from rclpy.node import Node
@@ -465,23 +466,27 @@ class YoloNode(Node):
 
         # Nearest-neighbor tracking association to previous global tracks
         assigned_tracks: List[dict] = []
-        unmatched_fused = list(range(len(fused_items)))
-        unmatched_tids = list(self.global_tracks.keys())
-
-        pairs = []
-        for fi in unmatched_fused:
-            fx, fy = fused_items[fi]["pos"]
-            for tid in unmatched_tids:
-                tx, ty = self.global_tracks[tid]["pos"]
-                d = math.hypot(fx - tx, fy - ty)
-                if d <= self.tracking_dist_gate:
-                    pairs.append((d, fi, tid))
-
-        pairs.sort(key=lambda x: x[0])
+        detection_positions = [
+            (float(item["pos"][0]), float(item["pos"][1]))
+            for item in fused_items
+        ]
+        track_observations = {
+            tid: (
+                (float(track["pos"][0]), float(track["pos"][1])),
+                float(track["last_seen"]),
+            )
+            for tid, track in self.global_tracks.items()
+        }
+        pairs = association_candidates(
+            detection_positions,
+            track_observations,
+            current_time,
+            self.tracking_dist_gate,
+        )
         used_fi = set()
         used_tid = set()
 
-        for d, fi, tid in pairs:
+        for _, fi, tid in pairs:
             if fi in used_fi or tid in used_tid:
                 continue
             used_fi.add(fi)

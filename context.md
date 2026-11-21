@@ -1,226 +1,116 @@
-# Project Context: Simulated Indoor Surveillance System
+# Project Context: ROS 2 Indoor Surveillance Simulation
 
-## Environment Details
-- **Operating System**: Windows host running Windows Subsystem for Linux 2 (WSL2)
-  - **WSL Distribution**: Ubuntu 24.04 LTS (`Ubuntu-24.04`)
-  - **WSL Linux Kernel**: 6.18.54.1-microsoft-standard-WSL2 (x86_64)
-- **Active Workspace**:
-  - Windows Host Path: `C:\Users\hmz_i\SEM-5\IOT\ros2_ws`
-  - WSL Mount Path: `/mnt/c/Users/hmz_i/SEM-5/IOT/ros2_ws`
-- **ROS 2 Distribution**: ROS 2 Jazzy Jalisco (`/opt/ros/jazzy`)
-- **Gazebo Distribution**: Gazebo Harmonic (`gz-sim` version 8.15.0)
-- **Display Server**: WSLg (X11 / Wayland on `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, `/tmp/.X11-unix/X0`)
-- **Rendering Architecture**: **Hybrid CPU/GPU Rendering**
-  - **3D Sensor Rendering & Visualization (GPU)**: Hardware-accelerated via Mesa Direct3D 12 Gallium driver (`GALLIUM_DRIVER=d3d12`, `MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`) executing on the dedicated **NVIDIA Quadro P1000 (4 GB VRAM)** with OpenGL 4.6 Core Profile. The OGRE 2 sensor engine offloads camera frame synthesis directly to the GPU.
-  - **Physics Simulation & ROS 2 Middleware (CPU)**: Gazebo's physics engine (`DART`), sensor system plugin orchestration, `ros_gz` bridging nodes, and DDS messaging execute on host CPU cores.
-- **Build Tool**: `colcon`
+## Environment
 
-## Installed ROS 2 & Gazebo Integration Packages
-- `ros_gz`: Umbrella meta-package for ROS 2 and Gazebo integration.
-- `ros_gz_sim`: Executables (`gz_sim.launch.py`, entity management) for launching and controlling Gazebo Harmonic.
-- `ros_gz_bridge`: Bidirectional bridge between ROS 2 topics/services and Gazebo Transport (`parameter_bridge`).
-- `ros_gz_image`: Dedicated transport bridge for camera image streaming between Gazebo and ROS 2 (`image_bridge`).
-- `ros_gz_interfaces`: ROS 2 message definitions for Gazebo communication.
-- Underlying vendor packages: `gz_sim_vendor`, `gz_sensors_vendor`, `gz_rendering_vendor`, `gz_physics_vendor`, `gz_tools_vendor`, etc.
-- GUI / Visualization: `rqt_image_view`.
+- Windows host with WSL2 Ubuntu 24.04; active workspace: `C:\Users\hmz_i\SEM-5\IOT\ros2_ws` (`/mnt/c/Users/hmz_i/SEM-5/IOT/ros2_ws` in WSL).
+- ROS 2 Jazzy, Gazebo Harmonic (`gz-sim` 8), `colcon`.
+- ROS commands, builds, and tests run in WSL. GUI use requires WSLg; headless simulation is supported.
+- Set `ROS_DOMAIN_ID=30` for simulation and perception processes. The workspace registration script intentionally does not set it.
 
-## Project Structure & Architecture Decisions
+## Package Layout and Ownership
+
 ```text
 ros2_ws/
-├── changelog.md                                 # Chronological log of all modifications and test results
-├── context.md                                   # Environment details, architecture, and package context
-├── camera_snapshot.jpg                          # Verification snapshot captured directly from camera stream
-├── yolo_snapshot.jpg                            # Verification snapshot of compressed annotated stream
-└── src/
-    └── surveillance_sim/                        # Simulation and perception package
-        ├── CMakeLists.txt                       # ament_cmake build script exporting share resources and programs
-        ├── package.xml                          # Package manifest specifying ros_gz, rclpy, std_msgs, sensor_msgs
-        ├── launch/
-        │   └── surveillance_world.launch.py     # Launch file starting Gazebo + image bridge + rqt + optional yolo
-        ├── worlds/
-        │   └── surveillance_world.sdf           # SDF 1.9 world description with camera and animated human
-        ├── models/                              # Directory for custom models
-        │   └── human/                           # Minimal animated human actor model
-        │       ├── model.config                 # Model metadata
-        │       └── meshes/                      # Low-poly skeletal animation meshes
-        │           ├── stand.dae                # Idle animation
-        │           ├── walk.dae                 # Walking animation
-        │           └── run.dae                  # Running animation
-        └── yolo/                                # Perception & activity classification module
-            ├── __init__.py                      # Python package marker
-            ├── activity_classifier.py           # Pure ROS-independent sliding-window classifier
-            ├── inference.py                     # ROS 2 ByteTrack tracking & streaming node
-            └── test_activity_classifier.py      # Pytest test suite for classifier
+|-- scripts/register_with_ros.sh
+|-- run_sim.ps1
+|-- src/
+|   |-- surveillance_sim/
+|   |   |-- launch/surveillance_world.launch.py
+|   |   |-- worlds/surveillance_world.sdf
+|   |   `-- models/
+|   `-- vision_perception/
+|       |-- config/cameras.yaml
+|       |-- yolo/
+|       |   |-- inference.py
+|       |   |-- activity_classifier.py
+|       |   |-- annotated_stream.py
+|       |   |-- goal_manager.py
+|       |   |-- ground_projection.py
+|       |   |-- tracking.py
+|       |   `-- test_*.py
+|       `-- test_tools/  (not installed as ROS nodes)
+|           |-- measure_run.py
+|           `-- publish_test_map.py
+|-- docs/INTEGRATION_NOTES.md
+`-- changelog.md
 ```
 
-### World Design (`surveillance_world.sdf`)
-- **SDF Version**: 1.9.
-- **Portability**: All models, geometries, and materials are self-contained without hardcoded local paths.
-- **Physics**: Configured with a `1ms` step size (`max_step_size=0.001`), real-time factor `1.0`.
-- **System Plugins**:
-  - `gz::sim::systems::Physics`: Advances physical simulation.
-  - `gz::sim::systems::UserCommands`: Entity creation and management.
-  - `gz::sim::systems::SceneBroadcaster`: Publishes scene state for GUI and bridges.
-  - `gz::sim::systems::Sensors`: Sensor processing system using the `ogre2` rendering engine.
-- **Scene Rendering**:
-  - `<scene>` configured with `<ambient>0.8 0.8 0.8 1.0</ambient>` and `<background>0.8 0.8 0.8 1.0</background>`.
-- **Environment Geometry**:
-  - **Floor**: 20m × 20m ground plane with visual and collision properties.
-  - **Lighting**: Directional light `sun` (`pose: 0 0 10`, diffuse `0.8 0.8 0.8`) with shadows enabled.
-  - **Perimeter Walls**: Enclosing a 16m × 16m indoor room with 2.5m height and 0.2m thickness (`wall_north`, `wall_south`, `wall_east`, `wall_west`).
-  - **Static Obstacles**:
-    - `pillar_nw`: Structural column at (-3.5, 3.5, 1.25), size 0.8m × 0.8m × 2.5m.
-    - `pillar_ne`: Structural column at (3.5, 3.5, 1.25), size 0.8m × 0.8m × 2.5m.
-    - `partition_wall`: Central corridor wall at (0, -2.0, 1.0), size 4.0m × 0.2m × 2.0m.
-    - `crate_sw`: Storage crate at (-4.0, -4.5, 0.5), size 1.2m × 1.2m × 1.0m.
-    - `crate_se`: Storage crate at (4.5, -4.0, 0.4), size 1.5m × 1.0m × 0.8m.
-  - **Fixed Corner Camera (`corner_camera`)**:
-    - **Mount Pose**: `-7.0 -7.0 2.3 0 0.25 0.7854` (South-West corner, 2.3m elevation, ~14.3° downward pitch, 45° yaw aiming diagonally across the room towards (0, 0)).
-    - **Coverage**: Overlooks all obstacles (`crate_sw` in foreground, `partition_wall` in midground, `pillar_nw` and `pillar_ne` in background).
-    - **Sensor Configuration**:
-      - Resolution: 640 × 480 pixels.
-      - Update Rate: 10 Hz (lowered to save GPU resources; auxiliary camera).
-      - Horizontal FOV: 1.05 radians (~60.16°).
-      - Pixel Format: `R8G8B8`.
-      - Clip Planes: near 0.1m, far 50.0m.
-      - Gazebo Topic: `/corner_camera/image_raw` (Type: `gz.msgs.Image`).
-      - Gazebo Camera Info Topic: `/corner_camera/camera_info` (Type: `gz.msgs.CameraInfo`).
-  - **Fixed Overhead Surveillance Camera (`overhead_camera`)**:
-    - **Mount Pose**: `0.0 0.0 12.2 0 1.5708 1.5708` (Mounted at room center looking straight down; image-up = world +Y, image-right = world +X).
-    - **Coverage**: Complete top-down view of the 16m × 16m room with >0.5m perimeter margin.
-      - Mathematical height & FOV derivation: With image 640 × 480 (aspect ratio 4:3) and horizontal FOV $\theta_h = 1.50\text{ rad}$ ($\theta_h/2 = 0.75\text{ rad}$, $\tan(0.75) \approx 0.9316$), the vertical half-FOV is $\tan(\theta_v/2) = (480/640)\tan(\theta_h/2) = 0.75 \times 0.9316 = 0.6987$. At mounting height $H = 12.2\text{ m}$, vertical floor coverage is $2 \times 12.2 \times 0.6987 \approx 17.05\text{ m}$ (giving $(17.05 - 16.0)/2 \approx 0.52\text{ m}$ margin along the room's North-South axis). Horizontal floor coverage is $2 \times 12.2 \times 0.9316 \approx 22.73\text{ m}$ (>3.3m margin East-West).
-    - **Sensor Configuration**:
-      - Resolution: 640 × 480 pixels.
-      - Update Rate: 30 Hz.
-      - Horizontal FOV: 1.50 radians (~85.94°).
-      - Pixel Format: `R8G8B8`.
-      - Clip Planes: near 0.1m, far 50.0m.
-      - Gazebo Topic: `/surveillance_camera/image_raw` (Type: `gz.msgs.Image`).
-      - Gazebo Camera Info Topic: `/surveillance_camera/camera_info` (Type: `gz.msgs.CameraInfo`).
-  - **Animated Human Subject (`human_subject`)**:
-    - **Architecture**: Kinematic `<actor>` model with skeletal animation clips, avoiding rigid-body physics contact solver overhead.
-    - **Asset Storage**: Portable meshes installed locally in `models/human/meshes/` (`stand.dae`, `walk.dae`, `run.dae`).
-    - **States & Animations**:
-      - `idle`: Natural standing pose (`stand.dae`) in the center of the room within direct camera view.
-      - `walk`: Steady walking locomotion (`walk.dae`) at ~1.0 m/s along the midground corridor.
-      - `run`: Dynamic running gait (`run.dae`) at ~2.5 m/s across the surveillance area.
-    - **Trajectory Cycle**: Defined via `<script>` with `<loop>true</loop>` (total 27.0s):
-      - 0.0s - 12.0s: **Idle (Staying)** at `(0, 0, 1.0)`, yaw 45° facing corner camera.
-      - 12.0s - 20.0s: **Walk** from `(0, 0, 1.0)` to `(2.5, 2.5, 1.0)` then `(0.5, 4.5, 1.0)`.
-      - 20.0s - 27.0s: **Run** from `(0.5, 4.5, 1.0)` to `(-2.5, 1.5, 1.0)` and loop back to origin `(0, 0, 1.0)`.
-    - **Performance Characteristics**: Hardware-accelerated vertex skinning on the NVIDIA GPU via D3D12 with negligible CPU load (~0% physics collision solver impact).
+`surveillance_sim` provides the world, cameras, actor, and `ros_gz_bridge` launch. `vision_perception` installs the `vision_perception yolo_node` executable and owns the camera perception, track association, classification, annotations, and `/goal_pose` publisher. No robot, localization, mapping, or navigation stack is part of this workspace.
 
-### ROS 2 Integration & Launch Configuration (`surveillance_world.launch.py`)
-- Resolves the world file path dynamically via `FindPackageShare('surveillance_sim')`.
-- Includes `gz_sim.launch.py` from `ros_gz_sim`.
-- Spawns bridging nodes via `ros_gz_bridge/parameter_bridge`:
-  - Bridges Gazebo `/surveillance_camera/image_raw` (`gz.msgs.Image`) to ROS 2 `/surveillance_camera/image_raw` (`sensor_msgs/msg/Image`).
-  - Bridges `/surveillance_camera/camera_info` (`gz.msgs.CameraInfo`) to ROS 2 (`sensor_msgs/msg/CameraInfo`).
-  - Bridges Gazebo `/corner_camera/image_raw` (`gz.msgs.Image`) to ROS 2 `/corner_camera/image_raw` (`sensor_msgs/msg/Image`).
-  - Bridges `/corner_camera/camera_info` (`gz.msgs.CameraInfo`) to ROS 2 (`sensor_msgs/msg/CameraInfo`).
-  - Optionally bridges `/clock` when `bridge_clock:=true`.
-  - NOTE: `ros_gz_image/image_bridge` removed to avoid generating redundant duplicate compressed topics.
-  - `rqt_image_view`: Optional GUI node conditionally launched when `rqt:=true` viewing `/surveillance_camera/image_raw`.
-- Supported Launch Arguments:
-  - `world`: Path to the SDF world file. Defaults to installed `share/surveillance_sim/worlds/surveillance_world.sdf`.
-  - `headless`: `true` or `false` (default: `false`). When `true`, passes `-s` to Gazebo.
-  - `paused`: `true` or `false` (default: `false`). When `false`, passes `-r` to Gazebo.
-  - `bridge_clock`: `true` or `false` (default: `false`). Bridges Gazebo `/clock` to ROS 2.
-  - `rqt`: `true` or `false` (default: `false`). Launches `rqt_image_view` viewing `/surveillance_camera/image_raw`.
-  - `yolo`: `true` or `false` (default: `false`). Starts the YOLO tracking and activity classification node.
+## World and Actor
 
-### YOLO Perception & Activity Classification Architecture
-The perception pipeline consumes both `/surveillance_camera/image_raw` and `/corner_camera/image_raw`:
-- **Detection and Tracking**: Ultralytics YOLO detects persons in each camera. Projected to the floor using each camera's calibrated pose, fused across cameras, then associated across frames to maintain global IDs.
-- **Camera Calibration**: `width`, `height`, `hfov`, `pose`, and `plane_z` come from `vision_perception/config/cameras.yaml`; overhead projects at z=1.5 m and corner at z=0.0 m. The node checks each image against configured dimensions, and the SDF drift test compares pose, HFOV, and resolution.
-- **Pure Activity Classifier (`ActivityClassifier`)**:
-  - Independent unit-testable class tracking projected world-ground coordinates for each global track ID.
-  - Uses simulation timestamps from image headers.
-  - Calculates speed in meters per second over a sliding time window (`window_sec`).
-  - Classifies states into:
-    - `Staying`: $v < \text{staying\_thresh}$
-    - `Walking`: $\text{staying\_thresh} \le v < \text{running\_thresh}$
-    - `Running`: $v \ge \text{running\_thresh}$
-    - `Unknown`: Insufficient track history (< `min_samples=3`).
-    - `None`: No human detected in field of view.
-  - Majority-vote smoothing over the last $N$ predictions (`smoothing_n`) eliminates frame-to-frame gait cycle oscillation and jitter.
-  - Stale tracks are pruned automatically after `track_timeout_sec`.
-- **CV Bridge Avoidance**: Image conversions are implemented directly using raw `numpy` buffer slicing and OpenCV (`cv2`) without `cv_bridge` to prevent numpy 1.x vs 2.x ABI crashes.
-- **Annotated Streaming**: Overhead and corner views are independently annotated from their native 640x480 frames and published as JPEG `sensor_msgs/msg/CompressedImage` on `/yolo/annotated/compressed` and `/yolo/corner/annotated/compressed` (each capped at 10 fps, quality 75). Native detections use orange boxes; fused global tracks use magenta projected markers with activity and map coordinates. Raw annotated topics remain disabled by default.
-- **Goal Pose**: `/goal_pose` (`geometry_msgs/msg/PoseStamped`) published on staying event >= 5s.
+The final SDF is a 16 m x 16 m room with perimeter walls, two pillars, two crates, two cameras, and one animated actor. The previously used central partition is absent. Any map used for goal validation must match this partition-free world.
 
-### ROS 2 Topics
-| Topic | Message Type | Direction | Description |
-| :--- | :--- | :--- | :--- |
-| `/surveillance_camera/image_raw` | `sensor_msgs/msg/Image` | Bridged | Raw RGB8 640x480 30 FPS overhead camera feed from Gazebo bridge |
-| `/surveillance_camera/camera_info`| `sensor_msgs/msg/CameraInfo` | Bridged | Overhead camera calibration info |
-| `/corner_camera/image_raw` | `sensor_msgs/msg/Image` | Bridged | Auxiliary corner camera feed (10 FPS) from Gazebo bridge |
-| `/corner_camera/camera_info` | `sensor_msgs/msg/CameraInfo` | Bridged | Corner camera calibration info |
-| `/yolo/annotated/compressed`| `sensor_msgs/msg/CompressedImage` | Published | Native 640x480 overhead annotated JPEG (max 10 fps, quality 75) |
-| `/yolo/corner/annotated/compressed`| `sensor_msgs/msg/CompressedImage` | Published | Native 640x480 corner annotated JPEG (max 10 fps, quality 75) |
-| `/yolo/annotated/raw` | `sensor_msgs/msg/Image` | Optional, disabled by default | Native overhead annotated frame |
-| `/yolo/corner/annotated/raw` | `sensor_msgs/msg/Image` | Optional, disabled by default | Native corner annotated frame |
-| `/person_activity` | `std_msgs/msg/String` | Published | Case-sensitive contract string ("Walking", "Running", "Staying") |
-| `/goal_pose` | `geometry_msgs/msg/PoseStamped` | Published | Person foot position in map coordinates upon staying >= 5s |
-| `/clock` | `rosgraph_msgs/msg/Clock` | Bridged | Simulation clock (when `bridge_clock:=true`) |
+The looping actor cycle is 27 s:
 
-### Node Parameters (`inference.py`)
-| Parameter | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `model` | string | `yolov8n.pt` | YOLO model weights name or path |
-| `conf` | double | `0.15` | Detection confidence threshold (tuned for Gazebo Collada meshes) |
-| `window_sec` | double | `2.0` | Sliding window duration for speed estimation (seconds) |
-| `staying_thresh` | double | `0.3` | Threshold between Staying and Walking (m/s) |
-| `running_thresh` | double | `1.75` | Threshold between Walking and Running (m/s) |
-| `device` | string | `cpu` | Ultralytics inference device |
-| `fusion_dist_thresh` | double | `0.8` | Maximum distance to fuse detections across cameras (meters) |
-| `tracking_dist_gate` | double | `1.5` | Maximum distance to associate a detection to an existing track (meters) |
-| `smoothing_n` | int | `5` | Majority-vote smoothing window size (history length) |
-| `track_timeout_sec` | double | `2.0` | Inactivity duration before dropping lost tracks (seconds) |
-| `jpeg_quality` | int | `75` | JPEG compression quality (1–100) |
-| `publish_raw` | bool | `false` | Toggle publishing native raw annotated camera frames |
-| `max_fps` | double | `2.0` | Maximum inference and annotated-stream rate in wall-clock FPS (hard-capped at 10) |
+- 0-12 s: idle at world `(0,0)`.
+- 12-16 s: walk at 0.875 m/s.
+- 16-16.833 s and 16.833-19 s: run at 3.000 and 3.138 m/s.
+- 19-27 s: walk back with segment speeds 1.100, 1.000, 1.000, 1.000, and 1.000 m/s.
 
-### How to Run & Verify
+The actor's stand/walk/run DAE animation resources use Gazebo Fuel URLs and may require network access or a local Gazebo cache. Sampled runtime review found visible foot glide during the current fast run; no SDF route or animation tuning has been made.
 
-1. **Launch Simulation with Perception Pipeline**:
-   ```bash
-   ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true
-   ```
-   Or run the VS Code task **ROS 2: Launch Surveillance Simulation with YOLO**. The compressed overhead and corner topics are independent `CompressedImage` streams; raw annotated streams can be enabled with `publish_raw:=true`.
-2. **Launch Simulation Headless & Run Perception Node Manually**:
-   ```bash
-   # Terminal 1: Simulation
-   ros2 launch surveillance_sim surveillance_world.launch.py headless:=true
+## Cameras and Perception
 
-   # Terminal 2: YOLO Node
-   ros2 run vision_perception yolo_node
-   ```
-3. **Run Unit Tests (Pure Activity Classifier)**:
-   ```bash
-   pytest src/vision_perception/yolo -v
-   ```
-4. **Inspect Topics & Streams**:
-   ```bash
-   # Echo plain badge topic
-   ros2 topic echo /person_activity
+| Camera | Pose `(x,y,z,roll,pitch,yaw)` | Image / HFOV | Configured rate | ROS topic |
+| :--- | :--- | :--- | ---: | :--- |
+| Overhead | `(0,0,12.2,0,1.5708,1.5708)` | 640x480 / 1.50 rad | 30 Hz | `/surveillance_camera/image_raw` |
+| Corner | `(-7,-7,2.3,0,0.25,0.7854)` | 640x480 / 1.05 rad | 10 Hz | `/corner_camera/image_raw` |
 
-   # Echo JSON telemetry
-   ros2 topic echo /person_activity_json
+`cameras.yaml` is the camera calibration source: image dimensions, HFOV, pose, projection `plane_z`, and bbox ground-point selection. Incoming image dimensions are checked at runtime, and `test_camera_sdf_drift.py` compares the SDF against YAML. Camera images and camera-info use `ros_gz_bridge parameter_bridge`; the legacy image bridge is not used.
 
-   # Check compressed frame bandwidth & rate
-   ros2 topic hz /yolo/annotated/compressed
-   ros2 topic hz /yolo/corner/annotated/compressed
-   ros2 topic bw /yolo/annotated/compressed
-   ```
+The overhead view has weak person detections at the actor's small image size. Corner detections and fused global tracks are projected into both annotated views. Each camera uses its own 640x480 frame; no composite stream is created. Compressed outputs use JPEG quality 75 and default `max_fps=2.0` (hard cap 10); raw annotated topics are disabled unless `publish_raw:=true`.
 
-## VS Code Task Automation (`.vscode/tasks.json`)
-The workspace includes dual-platform automated tasks to execute common workflows directly from VS Code (`Terminal -> Run Task...` or `Ctrl+Shift+P -> Tasks: Run Task`). Each task defines a native Linux execution block (when connected via VS Code WSL Remote) and a `"windows"` configuration block using `wsl -d Ubuntu-24.04 --cd "${workspaceFolder}"` for native Windows execution:
-- **`ROS 2: Launch Surveillance Simulation (GUI)`**: Builds if not yet built, sources the workspace, and runs `ros2 launch surveillance_sim surveillance_world.launch.py`, opening the Gazebo GUI window with the full simulation and ROS 2 bridges active via WSLg.
-- **`ROS 2: Launch Surveillance Simulation with Camera Preview (GUI + RQt)`**: Launches the simulation with both Gazebo GUI and `rqt_image_view` displaying the camera feed.
-- **`ROS 2: Launch Surveillance Simulation with YOLO`**: Starts Gazebo, both camera bridges, and the inference node in the YOLO virtual environment.
-- **`ROS 2: Run YOLO Inference Node`**: Runs `inference.py` using the WSL virtual environment `/home/hmz/yolo_venv`.
-- **`ROS 2: View Overhead Camera (RQt)`**: Launches `rqt_image_view` subscribed to `/surveillance_camera/image_raw`.
-- **`Gazebo: Open Surveillance World (Standalone GUI)`**: Directly opens `surveillance_world.sdf` in Gazebo Sim GUI without ROS 2 nodes.
-- **`ROS 2: Build workspace`**: Runs `colcon build --symlink-install` (configured as default build task).
-- **`ROS 2: List active topics`**: Inspects all active ROS 2 topics.
+The `ActivityClassifier` estimates metric speed from image-header timestamps using a 2.0 s window, `staying_thresh=0.3 m/s`, `running_thresh=1.75 m/s`, and smoothing. The current H4 runtime measured confusion in all actor segments, especially Running; see the integration notes before changing thresholds.
+
+## ROS Topics and Time Behavior
+
+- `/person_activity`: `std_msgs/msg/String`, exact labels `"Walking"`, `"Running"`, `"Staying"` with priority Staying > Running > Walking. No label is published when no person is classified.
+- `/yolo/annotated/compressed`: overhead-only 640x480 JPEG.
+- `/yolo/corner/annotated/compressed`: corner-only 640x480 JPEG.
+- `/goal_pose`: `geometry_msgs/msg/PoseStamped`, map-frame ground point with `z=0`, `w=1`, emitted once after a continuous Staying dwell of at least 5 s; global cooldown is 15 s.
+- `/map`: input only. A compatible transient-local OccupancyGrid must be supplied by the consuming integration. Without it, goals are deferred and retried while Staying.
+
+`yolo_node` forces `use_sim_time=True`; image header stamps drive classifier and dwell timing. Launch `bridge_clock:=true` when other nodes need ROS `/clock`. Free-space indexing uses map origin position, resolution, width, height, and row-major cells; map-origin yaw is assumed zero.
+
+## Setup and Commands
+
+Prerequisites include ROS 2 Jazzy, Gazebo Harmonic, `ros_gz_sim`, `ros_gz_bridge`, the message dependencies in `package.xml`, and Python packages NumPy <2, OpenCV, PyYAML, PyTorch, and Ultralytics. The node prepends `~/yolo_env` to the import path and falls back to `~/yolo_venv`. `yolov8n.pt` must be available in the Ultralytics cache or be downloaded on first use; model weights are not committed. Current WSL PyTorch CUDA 13.0 does not match the available driver capability 12.5, so inference runs on CPU. No GPU software was installed.
+
+Register or refresh the workspace after cloning/moving it:
+
+```bash
+bash scripts/register_with_ros.sh
+# Optional after building manually:
+bash scripts/register_with_ros.sh --no-build
+# Reversible removal:
+bash scripts/register_with_ros.sh --remove
+```
+
+It creates `~/.survellence_sim.bash`, adds a marked source block to `~/.bashrc`, and backs up the original to `~/.bashrc.survellence_sim.bak`. The VS Code task label is exactly **`Survellence_Sim: Register with ROS 2 (run once)`**. It supports native Linux and Windows/WSL task execution.
+
+Manual build and run:
+
+```bash
+source ~/.survellence_sim.bash
+export ROS_DOMAIN_ID=30
+colcon build --symlink-install
+pytest -q
+ros2 launch surveillance_sim surveillance_world.launch.py headless:=true bridge_clock:=true
+ros2 run vision_perception yolo_node
+```
+
+Launch defaults are GUI on, unpaused, `bridge_clock:=false`, and `yolo:=false`. Use `yolo:=true` to start the node through the launch file. The app uses the bare `ros2 run vision_perception yolo_node` command and stops it with SIGINT, then SIGKILL after 6 s.
+
+## Latest Runtime Check and Limitations
+
+The H4 headless run used the registered shell, test map, `bridge_clock:=true`, and the bare node command. It measured 81.016 simulated seconds in 120.190 wall seconds (RTF 0.674); image-header and `/clock` spans differed by 0.063 s. Three valid map-frame goals were published, one in each idle interval, at 11.683, 35.377, and 61.678 s.
+
+- Current corner detection was present in 208/210 inference samples (99.0%). The nearest actor track ID changed five times; nine samples contained multiple IDs.
+- The 100 activity messages used only allowed labels. Mean rate was 1.335 Hz simulated and 0.902 Hz wall time; if the 1 Hz minimum is wall-time-based, this run is slightly under it.
+- Measured input rates were 17.145 Hz sim overhead and 5.377 Hz sim corner, below configured sensor rates. Inference and annotated output were about 1.87 Hz wall / 2.59 Hz sim.
+- Run-segment classification is poor: only 4/25 nearest-track samples were Running and six were Unknown. Idle and walking are also confused. Keep defaults until a tuning decision is made.
+- Goals require an external `/map`; its origin yaw must be zero for current free-space indexing. Map production and `world_to_map` calibration belong to the consuming integration.
+- Overhead detection is weak for the actor's pixel size. CPU-only inference and external Gazebo Fuel assets are additional runtime constraints.
+
+The detailed confusion counts, topic-rate table, historical 15 Hz camera experiment, and prior no-map check are in `docs/INTEGRATION_NOTES.md`. Runtime helpers in `vision_perception/test_tools` are measurement utilities, not installed nodes.

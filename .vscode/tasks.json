@@ -181,7 +181,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
+        "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && ros2 run vision_perception yolo_node"
       ],
       "windows": {
         "command": "wsl",
@@ -192,7 +192,7 @@
           "${workspaceFolder}",
           "bash",
           "-lc",
-          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
+          "export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && ros2 run vision_perception yolo_node"
         ]
       },
       "options": {
@@ -262,13 +262,13 @@
       "command": "bash",
       "args": [
         "-lc",
-        "sleep 10 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
+        "sleep 10 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && ros2 run vision_perception yolo_node"
       ],
       "windows": {
         "command": "wsl",
         "args": [
           "-d", "Ubuntu-24.04", "--cd", "${workspaceFolder}", "bash", "-lc",
-          "sleep 10 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && if ros2 pkg executables vision_perception | grep -q yolo_node; then ros2 run vision_perception yolo_node; else ros2 run surveillance_sim inference.py; fi"
+          "sleep 10 && export ROS_DOMAIN_ID=30 && source /opt/ros/jazzy/setup.bash && source install/setup.bash && if [ -d ~/yolo_env ]; then source ~/yolo_env/bin/activate; else source ~/yolo_venv/bin/activate; fi && ros2 run vision_perception yolo_node"
         ]
       },
       "options": { "cwd": "${workspaceFolder}" },
@@ -303,6 +303,37 @@
         "Sim: View Overhead Camera (internal)"
       ],
       "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "Survellence_Sim: Register with ROS 2 (run once)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "bash scripts/register_with_ros.sh"
+      ],
+      "windows": {
+        "command": "wsl",
+        "args": [
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "${workspaceFolder}",
+          "bash",
+          "-lc",
+          "bash scripts/register_with_ros.sh"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "detail": "Registers this workspace in ROS 2. Safe to rerun after moving the repository.",
       "problemMatcher": []
     }
   ]
