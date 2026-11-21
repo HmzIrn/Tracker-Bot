@@ -11,7 +11,7 @@ All notable changes and verification outcomes are documented in this file.
 - Checkpoint: `colcon build --symlink-install` passed; perception pytest suite **24 passed**. Simulation output verification is deferred to the requested A2/A4 measurement run.
 
 ### Addendum A2: Overhead Detection Experiment
-- Captured and retained actor-visible native frames at sim stamp 3.0 s: `a2_overhead_frame.jpg` and `a2_corner_frame.jpg`. Approximate actor extent in the source frames: overhead **~15x16 px**; corner **~14x80 px** (partially occluded by the partition).
+- Captured actor-visible native frames at sim stamp 3.0 s; the files were later removed during C1 cleanup. Approximate actor extent in the source frames: overhead **~15x16 px**; corner **~14x80 px** (partially occluded by the partition).
 - Ran YOLOv8n/s/m on CPU at `imgsz` 640/960/1280 and `conf=0.15`; all overhead results were zero detections. Corner detections were:
 
   | Model | 640 | 960 | 1280 |
@@ -82,13 +82,13 @@ All notable changes and verification outcomes are documented in this file.
 - Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **68 passed**.
 
 ### Close-out H3: Register the workspace with ROS 2
-- The requested old and new package names are both `surveillance_sim`; no directory/package rename was applicable. Confirmed one `surveillance_sim` entry in `ros2 pkg list`, the `vision_perception yolo_node` executable, and launch argument resolution from a shell sourcing only `~/.survellence_sim.bash`.
+- The requested old and new package names are both `surveillance_sim`; no directory/package rename was applicable. Confirmed one `surveillance_sim` entry in `ros2 pkg list`, the `vision_perception yolo_node` executable, and launch argument resolution from a shell sourcing only `~/.surveillance_sim.bash`.
 - Removed generated `build/surveillance_sim`, `install/surveillance_sim`, and root `log/` before a clean `colcon build --symlink-install`; both packages rebuilt successfully. Added `scripts/register_with_ros.sh` with `--no-build` and reversible `--remove`; it does not set `ROS_DOMAIN_ID`. Two registrations preserved `.bashrc` and the registration file byte-for-byte; removal restored the pre-registration backup, and re-registration passed the fresh-shell checks.
 - Added the Linux/Windows VS Code registration task and LF policy for shell scripts. Updated both YOLO task variants to run `vision_perception yolo_node` directly; `run_sim.ps1` already referenced the requested package name and needed no change.
 - Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **68 passed**.
 
 ### Close-out H4: Revalidate three actor cycles
-- From a shell sourcing only `~/.survellence_sim.bash`, ran the headless world with `bridge_clock:=true`, the transient-local test map, and bare `ros2 run vision_perception yolo_node`. The recorder reached **81.016 sim s / 120.190 wall s (RTF 0.674)**; `/clock` and camera-header spans differed by only **0.063 s**.
+- From a shell sourcing only `~/.surveillance_sim.bash`, ran the headless world with `bridge_clock:=true`, the transient-local test map, and bare `ros2 run vision_perception yolo_node`. The recorder reached **81.016 sim s / 120.190 wall s (RTF 0.674)**; `/clock` and camera-header spans differed by only **0.063 s**.
 - Exactly **3** goals were recorded, at sim **11.683/35.377/61.678 s**, one during each 12 s idle interval. All had `frame_id=map`, `z=0`, `w=1`, and map positions within **0.14 m** of `(0,0)`. Reused F1's 43 sim-second no-map run: **0 goals**.
 - Confusion counts use the closest tracked entry to the SDF actor position; columns are Staying / Walking / Running / Unknown:
 
@@ -114,6 +114,37 @@ All notable changes and verification outcomes are documented in this file.
 - Added ignore rules for local measurement, frame, and experiment output directories; existing build/install/log, Python cache, and model-weight rules remain in effect.
 - Assembled a temporary clone from `HEAD`, tracked worktree changes, and explicit copies of the untracked source files, excluding generated captures. In that clone, `colcon build --symlink-install` built both packages, `pytest -q` passed **68 tests**, and `register_with_ros.sh --no-build` resolved the expected packages, executable, and launch arguments. Restored registration to the primary workspace afterward.
 - Checkpoint: clean-clone build passed; clean-clone pytest **68 passed**; clean-clone ROS registration passed.
+
+### Final task C1: Remove disposable captures and correct registration spelling
+- Removed saved camera frames, workspace YOLO weights, Python caches, and pytest cache. No workspace `.bak`/`.tmp`, measurement/capture directories, or temporary SDF copies were present. `yolo_node` passes the bare model name `yolov8n.pt` to Ultralytics; no repository-local weights path is used.
+- Updated registration filenames, marker names, VS Code task label, and documentation to `Surveillance_Sim` / `~/.surveillance_sim.bash`. Removed dangling capture links while retaining the A2 measurements.
+- Checkpoint: `colcon build --symlink-install` passed; `pytest -q` **68 passed**.
+
+### Final task C1b: Wall-clock activity publication
+- Added `activity_publish_hz` (default 2.0, clamped to 1.5-10.0), immediate valid-label changes, wall-clock repeats, empty-label silence, and a 3 s inference-staleness cutoff. Five fake-wall-clock tests cover change, cadence, clamping, silence, and staleness.
+- The one 18.052 sim-second / 22.501 wall-second run recorded 28 valid `/person_activity` messages at **1.749 Hz wall / 2.142 Hz sim**, and one `/goal_pose` at **10.792 sim seconds** in the idle segment. The first executor-timer implementation's maximum observed message gap was **0.893 s**, so the heartbeat was moved to a wall-clock worker thread to avoid inference callback starvation. The final worker-thread implementation was not runtime-remeasured because only one simulation run was allowed.
+- `ros2 topic info -v` and `ros2 topic hz` were invoked during teardown after the perception publishers had disappeared; those CLI captures do not establish live publisher QoS or rates. Recorder rates and code/config profiles are used where available, and this limitation is called out in `INTERFACES.md`.
+- Checkpoint: `colcon build --symlink-install` passed; workspace `pytest -q` **78 passed**.
+
+### Final task C2: Publish integration contract
+- Added root `INTERFACES.md` as the stable reference for ownership, launch/process behavior, published and consumed topics, QoS evidence, semantics, coordinates, parameters, limitations, and integration checklists. Reworked `docs/INTEGRATION_NOTES.md` to retain measurements/history and link to the contract; updated `context.md` with the C1b measurement caveat.
+- Cross-checked documented parameter defaults, topic names/types, camera calibration, and launch arguments against source/config/SDF. Verified `ros2 launch ... --show-args` and the measurement helper's `--help`; no second simulation was run.
+- Final cleanup removed the model weight re-downloaded by C1b and regenerated Python/pytest caches. The case-insensitive repository spelling scan returned zero matches.
+- Checkpoint: `colcon build --symlink-install` passed for both packages; workspace `pytest -q` **78 passed**.
+
+### D1: Live integration verification
+- The one headless run recorded four valid idle-segment `/goal_pose` messages and 199 valid activity strings (1.615 Hz wall average; 21.952 s largest overall gap). Active-only cadence could not be separated from unclassified periods. Live CLI QoS observations and inconclusive `ros2 topic hz` captures, the ineffective runtime `world_to_map` update, YAML restart behavior, model startup, and shutdown results are recorded in `docs/INTEGRATION_NOTES.md`.
+- The image-compress output type was discovered, but its messages/rate were not confirmed. Preserve the pre-existing ignored workspace weight; remove only D1 temporary files.
+- Checkpoint: `colcon build --symlink-install` passed for both packages; workspace `pytest -q` **78 passed**.
+
+### D2: Rewrite the integration guide
+- Replaced the compact contract with a status-labeled integration guide: quick reference, ownership, package deployment choices, processes/topics/QoS, semantics, world/map/camera reference, parameters, app/robot runbooks, and limitations. Updated `context.md` and clarified D1/C1b history in `docs/INTEGRATION_NOTES.md`.
+- External ROS Bridge, robot, Camera Compress delivery, and active-only activity cadence remain explicitly unverified; no runtime behavior or SDF was changed.
+- Checkpoint: `colcon build --symlink-install` passed for both packages; workspace `pytest -q` **78 passed**.
+
+### D3: Consistency and command cross-check
+- Checked source-declared topics/parameters against `INTERFACES.md`, verified both package prefixes, executable, launch `--show-args`, and `measure_run.py --help`. The repository spelling scan returned zero hits. External app/robot commands and live topic rates requiring another simulation remain labeled unverified.
+- Final checkpoint: `colcon build --symlink-install` passed for both packages; workspace `pytest -q` **78 passed**. Markdown links, anchors, and whitespace checks passed. No second simulation or repository behavior change was made.
 
 ### Step 4: /goal_pose Publisher
 - Added goal pose configuration to `config/cameras.yaml` (`staying_dwell_sec: 5.0`, `goal_cooldown_sec: 15.0`, `world_to_map: [0.0, 0.0, 0.0]`), declared in `yolo_node` with runtime ROS parameter override support.
@@ -318,7 +349,7 @@ All notable changes and verification outcomes are documented in this file.
   - When actor passes behind the room walls, `"None"` is published as required.
 
 #### Test 6: Compressed Frame Verification & Snapshot
-- Decoded `/yolo/annotated/compressed` frame saved to [`yolo_snapshot.jpg`](file:///C:/Users/hmz_i/SEM-5/IOT/ros2_ws/yolo_snapshot.jpg).
+- Decoded `/yolo/annotated/compressed` frame was saved for visual verification; the capture was later removed during C1 cleanup.
 - Confirmed: 640x480 resolution, bounding box with filled badge and text `"ID 1: Walking"` clearly rendered.
 - Outcome: **PASSED**.
 
@@ -391,7 +422,7 @@ All notable changes and verification outcomes are documented in this file.
   Intensity Stats: min=32, mean=175.89, max=231
   Successfully updated camera_snapshot.jpg with human subject in frame!
   ```
-- Visual Inspection: Saved frame [`camera_snapshot.jpg`](file:///C:/Users/hmz_i/SEM-5/IOT/ros2_ws/camera_snapshot.jpg) confirmed the human subject standing and visible in the center of the room.
+- Visual Inspection: A saved frame confirmed the human subject standing and visible in the center of the room; the capture was later removed during C1 cleanup.
 - Outcome: **PASSED**.
 
 #### Test 4: Streaming Rate Stability
@@ -455,7 +486,7 @@ All notable changes and verification outcomes are documented in this file.
   Intensity: min=64, mean=176.10, max=231
   Successfully captured and saved GPU-rendered frame to camera_snapshot.jpg
   ```
-- Visual Inspection: Saved frame in [`camera_snapshot.jpg`](file:///C:/Users/hmz_i/SEM-5/IOT/ros2_ws/camera_snapshot.jpg) verified sharp rendering, shadows, and obstacle visibility under GPU acceleration.
+- Visual Inspection: A saved frame verified sharp rendering, shadows, and obstacle visibility under GPU acceleration; the capture was later removed during C1 cleanup.
 - Outcome: **PASSED**.
 
 ---

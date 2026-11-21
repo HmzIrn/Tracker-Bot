@@ -20,6 +20,7 @@ install(PROGRAMS
 )
 
 install(PROGRAMS
+  yolo/activity_publisher.py
   yolo/activity_classifier.py
   yolo/annotated_stream.py
   yolo/ground_projection.py

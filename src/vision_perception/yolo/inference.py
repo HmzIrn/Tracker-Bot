@@ -25,6 +25,7 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -56,6 +57,10 @@ import yaml
 from ultralytics import YOLO
 
 from activity_classifier import ActivityClassifier
+from activity_publisher import (
+    ActivityPublisherState,
+    MIN_PUBLISH_INTERVAL_SEC,
+)
 from annotated_stream import (
     CORNER_COMPRESSED_TOPIC,
     CORNER_RAW_TOPIC,
@@ -141,6 +146,7 @@ class YoloNode(Node):
         self.declare_parameter("corner_output_raw_topic", CORNER_RAW_TOPIC)
         self.declare_parameter("activity_topic", "/person_activity")
         self.declare_parameter("activity_json_topic", "/person_activity_json")
+        self.declare_parameter("activity_publish_hz", 2.0)
         self.declare_parameter("goal_pose_topic", "/goal_pose")
         self.declare_parameter("map_topic", "/map")
 
@@ -186,6 +192,17 @@ class YoloNode(Node):
         if not math.isfinite(requested_max_fps) or requested_max_fps <= 0.0:
             raise ValueError("max_fps must be a positive finite value")
         self.max_fps = min(10.0, requested_max_fps)
+        requested_activity_publish_hz = float(
+            self.get_parameter("activity_publish_hz").value
+        )
+        self.activity_publisher = ActivityPublisherState(
+            requested_activity_publish_hz
+        )
+        if self.activity_publisher.activity_publish_hz != requested_activity_publish_hz:
+            self.get_logger().warning(
+                "activity_publish_hz clamped to "
+                f"{self.activity_publisher.activity_publish_hz:g}"
+            )
         self.fusion_dist_thresh = float(self.get_parameter("fusion_dist_thresh").value)
         self.tracking_dist_gate = float(self.get_parameter("tracking_dist_gate").value)
         self.track_timeout_sec = float(self.get_parameter("track_timeout_sec").value)
@@ -231,10 +248,7 @@ class YoloNode(Node):
         self.corner_latest: Optional[Tuple[Image, np.ndarray, float]] = None
         self.last_infer_wall_time = 0.0
 
-        # Activity publication rate tracking (Contract: 1 - 10 Hz while person visible)
-        self.last_activity_pub_sim_time: float = -1.0
-        self.last_activity_value: str = ""
-        self.activity_heartbeat_timer = self.create_timer(1.0, self.on_activity_heartbeat)
+        self.activity_publisher_lock = threading.Lock()
 
         # Subscriptions (Using depth 10 to match parameter_bridge RELIABLE image publisher)
         self.sub_overhead = self.create_subscription(
@@ -277,25 +291,37 @@ class YoloNode(Node):
             f"  Compressed:      {compressed_topic} (max 640x480, max {self.max_fps} fps, quality {self.jpeg_quality})\n"
             f"  Goal pose:       {goal_topic} (dwell {staying_dwell_sec}s, cooldown {goal_cooldown_sec}s)"
         )
+        self.activity_publisher_stop = threading.Event()
+        self.activity_publisher_thread = threading.Thread(
+            target=self.activity_publisher_loop,
+            name="activity-wall-clock-publisher",
+            daemon=True,
+        )
+        self.activity_publisher_thread.start()
 
     def on_map(self, msg: OccupancyGrid):
         self.map_msg = msg
 
     def on_activity_heartbeat(self):
-        """Ensure /person_activity is published at least 1 Hz while a person is visible."""
-        if not self.last_activity_value:
-            return
-        now_sim = 0.0
-        if self.overhead_latest is not None:
-            now_sim = max(now_sim, self.overhead_latest[2])
-        if self.corner_latest is not None:
-            now_sim = max(now_sim, self.corner_latest[2])
+        with self.activity_publisher_lock:
+            label = self.activity_publisher.heartbeat(time.monotonic())
+        if label is not None:
+            self.publish_activity(label)
 
-        if now_sim > 0.0 and (now_sim - self.last_activity_pub_sim_time) >= 1.0:
-            act_msg = String()
-            act_msg.data = self.last_activity_value
-            self.pub_activity.publish(act_msg)
-            self.last_activity_pub_sim_time = now_sim
+    def activity_publisher_loop(self):
+        while not self.activity_publisher_stop.wait(MIN_PUBLISH_INTERVAL_SEC):
+            self.on_activity_heartbeat()
+
+    def stop_activity_publisher(self):
+        self.activity_publisher_stop.set()
+        self.activity_publisher_thread.join(timeout=1.0)
+        if self.activity_publisher_thread.is_alive():
+            raise RuntimeError("activity wall-clock publisher did not stop")
+
+    def publish_activity(self, label: str):
+        act_msg = String()
+        act_msg.data = label
+        self.pub_activity.publish(act_msg)
 
     @staticmethod
     def to_bgr(msg: Image) -> np.ndarray:
@@ -586,18 +612,20 @@ class YoloNode(Node):
         # Exactly "Walking", "Running", or "Staying". NEVER "None" or "Unknown".
         # Publish NOTHING when nobody is classified.
         # Most serious label: Staying > Running > Walking.
-        # Rate: at least 1 Hz and at most 10 Hz while a person is visible.
+        # Publish state changes immediately; the steady-clock timer handles repeats.
+        current_activity = ""
         if valid_activities:
-            most_serious = max(valid_activities, key=lambda a: severity_rank.get(a, 0))
-            self.last_activity_value = most_serious
-            min_interval = 1.0 / self.max_fps if self.max_fps > 0 else 0.1
-            if (current_time - self.last_activity_pub_sim_time) >= (min_interval - 1e-4):
-                act_msg = String()
-                act_msg.data = most_serious
-                self.pub_activity.publish(act_msg)
-                self.last_activity_pub_sim_time = current_time
-        else:
-            self.last_activity_value = ""
+            current_activity = max(
+                valid_activities,
+                key=lambda activity: severity_rank.get(activity, 0),
+            )
+        with self.activity_publisher_lock:
+            activity_to_publish = self.activity_publisher.update(
+                current_activity,
+                time.monotonic(),
+            )
+        if activity_to_publish is not None:
+            self.publish_activity(activity_to_publish)
 
         # Telemetry topic /person_activity_json
         json_msg = String()
@@ -772,6 +800,7 @@ def main(args=None):
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
+        node.stop_activity_publisher()
         node.destroy_node()
         rclpy.try_shutdown()
 

@@ -1,125 +1,88 @@
-# Surveillance Simulation and Perception Integration Notes
+# Integration Measurements and History
 
-## 1. Package Boundaries
+[`../INTERFACES.md`](../INTERFACES.md) is the stable interface contract. This file records experiments, observed values, and unresolved measurement questions; it is not a second source of topic defaults or setup instructions.
 
-- `surveillance_sim` owns the Gazebo Harmonic world, actor, cameras, and Gazebo-to-ROS bridges.
-- `vision_perception` owns `yolo_node`, camera calibration, tracking, activity classification, goal poses, and annotated image streams.
-- This workspace does not create `/map` or include a robot, navigation, localization, or mapping stack. The consuming integration supplies a compatible map.
+## A2-A4: Detection, projection, and classifier experiments
 
-## 2. World and Cameras
+### A2 overhead/corner detection experiment
 
-The final SDF is a 16 m x 16 m room with perimeter walls, two pillars, two crates, two cameras, and one animated actor. The former central partition is absent because it blocked the corner camera; maps must correspond to this partition-free world.
+An actor-visible native frame pair was captured at sim stamp 3.0 s and later deleted during C1 cleanup. Approximate actor extent was **15x16 px overhead** and **14x80 px corner** (partially occluded). YOLOv8n/s/m ran on CPU at `conf=0.15`:
 
-The actor repeats a 27 s trajectory:
-
-| Segment | Sim-time interval | Waypoint speed |
+| Model | Overhead detections, imgsz 640 / 960 / 1280 | Corner detections, imgsz 640 / 960 / 1280 |
 | :--- | :--- | :--- |
-| Idle at `(0,0)` | 0-12 s | 0 m/s |
-| Walk in | 12-16 s | 0.875 m/s |
-| Run | 16-16.833 s, 16.833-19 s | 3.000, 3.138 m/s |
-| Walk return | 19-27 s | 1.100, 1.000, 1.000, 1.000, 1.000 m/s |
+| YOLOv8n | 0 / 0 / 0 | 0 / 1 (`0.211`, 13.1x55.0 px) / 1 (`0.419`, 14.0x56.3 px) |
+| YOLOv8s | 0 / 0 / 0 | 0 / 1 (`0.228`, 12.9x55.8 px) / 2 (`0.471`, 13.5x55.8 px; `0.334`, 13.0x80.6 px) |
+| YOLOv8m | 0 / 0 / 0 | 0 / 0 / 1 (`0.399`, 14.1x54.6 px) |
 
-The `staying_thresh=0.3 m/s` and `running_thresh=1.75 m/s` defaults are unchanged. Path tests check room bounds, obstacle clearance, and the corner camera frustum. The actor's `stand.dae`, `walk.dae`, and `run.dae` assets are referenced from Gazebo Fuel URLs, so the first world launch may need network access or a populated Gazebo model cache.
+The headless run reached **42.87 simulated seconds** before its 110-second wall guard, rather than the requested 60 seconds. No camera resolution or model default was changed. The result supports relying on projected corner-track markers in the overhead annotation rather than overhead detections.
 
-| Camera | Pose `(x,y,z,roll,pitch,yaw)` | Image / HFOV | SDF rate | ROS image topic |
-| :--- | :--- | :--- | ---: | :--- |
-| Overhead | `(0,0,12.2,0,1.5708,1.5708)` | 640x480 / 1.50 rad | 30 Hz | `/surveillance_camera/image_raw` |
-| Corner | `(-7,-7,2.3,0,0.25,0.7854)` | 640x480 / 1.05 rad | 10 Hz | `/corner_camera/image_raw` |
+### A3 projection calibration
 
-`vision_perception/config/cameras.yaml` supplies pose, image size, HFOV, projection plane, and ground-point selection. Overhead projection intersects `plane_z=1.5` at the bbox center; corner projection intersects `plane_z=0.0` at the bbox bottom-center. Runtime dimension checks and `test_camera_sdf_drift.py` guard SDF/YAML drift.
+The SDF/YAML drift test compares both camera poses, HFOV (1.50/1.05 rad), and 640x480 resolution. Integer-pixel geometric round-trip error was **0.00004 m overhead at room center** and **0.06817 m corner near the wall**. These are pixel-quantization errors, not detector localization accuracy.
 
-## 3. ROS Interface Contract
+### A4 classifier sampling
 
-| Topic | Type | Contract |
-| :--- | :--- | :--- |
-| `/person_activity` | `std_msgs/msg/String` | Exact values `"Walking"`, `"Running"`, `"Staying"`; priority is Staying > Running > Walking. Publish while a person is classified and nothing when no person is classified. |
-| `/yolo/annotated/compressed` | `sensor_msgs/msg/CompressedImage` | Overhead-only native 640x480 JPEG, quality 75, no more than 10 fps. |
-| `/yolo/corner/annotated/compressed` | `sensor_msgs/msg/CompressedImage` | Corner-only native 640x480 JPEG, quality 75, no more than 10 fps. |
-| `/yolo/annotated/raw`, `/yolo/corner/annotated/raw` | `sensor_msgs/msg/Image` | Optional native raw outputs; disabled by default. |
-| `/goal_pose` | `geometry_msgs/msg/PoseStamped` | One event per continuous Staying episode of at least 5 s; `frame_id=map`, `z=0`, `w=1`, at least 15 s global cooldown, and a free-space cell on `/map`. |
-| `/map` | `nav_msgs/msg/OccupancyGrid` | Input to `yolo_node`; must be provided by the consuming integration with transient-local durability. No map means no goal: the episode remains armed and retries while the person is still Staying. |
+At `max_fps=2.0`, `window_sec=1.0`, 42.07 sim seconds yielded 33 tracked updates across tracks 1-6. Sample counts per 1-second window had min/median/max **1/3/4**, and **11/33** updates had fewer than `min_samples=3`. Replaying those positions with `window_sec=2.0` gave **1/5/6** samples and **9/33** updates below three.
 
-Both annotated streams contain native camera detections and projected fused global-track markers. The node forces `use_sim_time=True` and uses image-header timestamps for activity and dwell calculations. Use `bridge_clock:=true` when other ROS timers or nodes require `/clock`. `max_fps` defaults to 2.0 wall-clock frames/s and is capped at 10.
+Confusion matrices (rows are ground truth Idle / Walk / Run; columns are predicted Staying / Walking / Running / Unknown):
 
-## 4. Setup, Registration, and Run
+| Window | Idle | Walk | Run |
+| :--- | :--- | :--- | :--- |
+| 1.0 s | 0 / 0 / 0 / 2 | 0 / 8 / 0 / 5 | 0 / 15 / 1 / 2 |
+| 2.0 s replay | 0 / 0 / 0 / 2 | 0 / 8 / 0 / 5 | 0 / 16 / 0 / 2 |
 
-### Requirements
+The 2-second replay reduced sample starvation but did not improve the confusion matrix. The window was set to 2.0 s; speed thresholds were not changed. The CPU-limited run did not justify increasing inference frequency.
 
-- WSL2 Ubuntu 24.04 with ROS 2 Jazzy, Gazebo Harmonic, `colcon`, `ros_gz_sim`, `ros_gz_bridge`, and the ROS message dependencies declared in the two package manifests.
-- YOLO runtime Python packages: NumPy below 2.0, OpenCV, PyYAML, PyTorch, and Ultralytics. The node searches `~/yolo_env` before `~/yolo_venv`; inference currently uses the CPU.
-- Ultralytics weights `yolov8n.pt`. If not already cached, the first YOLO start may download them. Do not add model weights to the repository.
-- GUI tasks additionally need a working WSLg display; headless launch does not require the GUI.
+## F1-F3: Goal, actor speed, and corner recall
 
-### Register once after cloning or moving the workspace
+### F1 end-to-end goals
 
-Run from the workspace root in WSL:
+With the transient-local all-free test map (origin `(-5,-5)`, resolution `0.1 m`, size `100x100`), the earlier 55-sim-second run observed exactly one valid goal in each of two idle episodes. Both were within **0.14 m** of `(0,0)` and had `frame_id=map`, `z=0`, `w=1`. A separate **43 sim-second** run without the test-map helper produced **zero goals** and throttled missing-map warnings.
 
-```bash
-bash scripts/register_with_ros.sh
-```
+### F2 waypoint speed comparison
 
-This builds with `colcon build --symlink-install`, writes the workspace overlay path to `~/.survellence_sim.bash`, and adds a marked source block to `~/.bashrc`. The first edit backs up the existing file to `~/.bashrc.survellence_sim.bak`. The script is safe to rerun, supports `--no-build` and reversible `--remove`, and does not set `ROS_DOMAIN_ID`.
+Current SDF waypoint segment speeds are:
 
-The VS Code task is named **`Survellence_Sim: Register with ROS 2 (run once)`** and has native Linux and Windows/WSL blocks. Tasks and `run_sim.ps1` set `ROS_DOMAIN_ID=30`; for manual commands, set it in the shell:
+| Segment | Speed (m/s) | Comparison with Staying `<0.3` and Running `>=1.75` thresholds |
+| :--- | ---: | :--- |
+| Idle | 0 | Staying |
+| Walk segments | 0.875, 1.100, then 1.000 m/s segments | Above Staying, below Running |
+| Run segments | 3.000, 3.138 | Above Running |
 
-```bash
-source ~/.survellence_sim.bash
-export ROS_DOMAIN_ID=30
-colcon build --symlink-install
-pytest -q
-```
+An earlier trajectory measurement (before the H2 route update) reported walk/run segment speeds of 1.010/1.131 and 1.697/1.166 m/s; those values are historical and superseded by the current SDF waypoint speeds. No speed threshold or route change was made for this comparison.
 
-Launch the world with the perception node:
+### F3 corner-camera recall
 
-```bash
-ros2 launch surveillance_sim surveillance_world.launch.py yolo:=true bridge_clock:=true
-```
+Across **55 unoccluded actor-visible frames** from two cycles, each model/size combination detected the actor in **55/55** frames. Mean actor pixel height was **80.95 px** (range 63-94).
 
-Or start the world and node separately:
+| Model / imgsz | Mean / median CPU time per frame |
+| :--- | :--- |
+| YOLOv8n / 640 | 115.3 / 58.6 ms |
+| YOLOv8s / 640 | 156.1 / 151.5 ms |
+| YOLOv8n / 960 | 143.0 / 133.9 ms |
+| YOLOv8s / 960 | 354.9 / 350.3 ms |
 
-```bash
-ros2 launch surveillance_sim surveillance_world.launch.py headless:=true bridge_clock:=true
-ros2 run vision_perception yolo_node
-```
+Recommendation from that sample: retain v8n at 640 pending broader data. Unlike the partly occluded A2 sample, the current world has no central partition.
 
-The app's node command is the bare `ros2 run vision_perception yolo_node` (no arguments or stdin). Stop it with SIGINT; if needed, follow with SIGKILL after 6 seconds.
+## F4: Camera-rate experiment
 
-## 5. Map Coordinates and Free-Space Checks
+At the configured 30 Hz overhead source rate, measured RTF was **0.763**. A temporary 15 Hz SDF copy measured **0.826** (+8.3%). Sim-time inference/annotation rates shifted from about **2.47 to 2.22 Hz**, while wall rates remained about **1.95/1.91 Hz**. The source SDF was not changed; ask before making any camera-rate change permanent.
 
-`world_to_map: [tx, ty, yaw_radians]` transforms the projected Gazebo world point into the `map` frame:
+## H4: Three-cycle runtime verification
 
-```text
-x_map = tx + cos(yaw)*x_world - sin(yaw)*y_world
-y_map = ty + sin(yaw)*x_world + cos(yaw)*y_world
-```
+The headless run used `bridge_clock:=true`, the transient-local test map, and bare `ros2 run vision_perception yolo_node`. It collected **81.016 sim seconds / 120.190 wall seconds (RTF 0.674)**; `/clock` and image-header spans differed by **0.063 s**.
 
-If world and map axes align, set yaw to zero; for example, a map-frame translation of `(1.25,-2.0)` uses `world_to_map: [1.25, -2.0, 0.0]`. The value is not the OccupancyGrid origin. Calibrate it by comparing known world points with their coordinates in the supplied map.
+Three valid goals were emitted, one during each idle interval:
 
-For goal validation, the node uses map origin position, resolution, width, height, and row-major cell order. **The free-space nudge currently assumes map-origin yaw is zero.** A non-free target is moved to the nearest free cell within 0.5 m; a missing map defers the goal. The test map used in verification had origin `(-5,-5)`, resolution `0.1 m`, size `100x100`, and all cells free.
+| Image-stamp time | Map position `(x,y)` m |
+| ---: | :--- |
+| 11.683 s | `(-0.118,-0.075)` |
+| 35.377 s | `(-0.109,-0.070)` |
+| 61.678 s | `(-0.109,-0.064)` |
 
-## 6. Verification Results
+All were within 0.14 m of the idle point `(0,0)` and had `frame_id=map`, `z=0`, `w=1`. The no-map result is recorded under F1.
 
-### Calibration and earlier detector experiments
-
-- The camera/SDF test compares both camera poses, HFOVs, and 640x480 resolutions. Integer-pixel geometric round-trip errors against the room-center and near-wall waypoints were 0.00004 m overhead and 0.06817 m corner; these are projection quantization results, not detector localization accuracy.
-- A2's saved, partially occluded frame pair is available at [overhead](../a2_overhead_frame.jpg) and [corner](../a2_corner_frame.jpg). Actor extents were about 15x16 px overhead and 14x80 px corner. At `conf=0.15`, overhead yielded zero detections for v8n/s/m at imgsz 640/960/1280. Corner detections were: v8n `0/1/1`, v8s `0/1/2`, and v8m `0/0/1` at those sizes. No sensor resolution or model default was changed.
-- The earlier two-cycle F3 sample (before the H2 route update) measured 55/55 corner detections for v8n/s at imgsz 640/960, with mean actor height 80.95 px. Its results are historical and not directly comparable to the current route below.
-
-### Current route: 81-second runtime check
-
-The headless run used the registered shell, `bridge_clock:=true`, the transient-local test map, and bare `ros2 run vision_perception yolo_node`. It collected 81.016 simulated seconds in 120.190 wall seconds (RTF 0.674); `/clock` and image-header spans differed by 0.063 s.
-
-Exactly three goals were emitted, one during each idle interval:
-
-| Image-stamp time | Map position `(x,y)` m | Frame and orientation |
-| ---: | :--- | :--- |
-| 11.683 s | `(-0.118,-0.075)` | `map`, `z=0`, `w=1` |
-| 35.377 s | `(-0.109,-0.070)` | `map`, `z=0`, `w=1` |
-| 61.678 s | `(-0.109,-0.064)` | `map`, `z=0`, `w=1` |
-
-Each goal is within 0.14 m of the idle point `(0,0)`. F1's separate 43-second no-map run observed zero goals; missing-map warnings were throttled and the Staying episode remained eligible for retry.
-
-For classification, each inference sample was assigned the closest tracked position to the SDF-interpolated actor position. Counts below are true segment by predicted Staying / Walking / Running / Unknown:
+Classification counts assign each inference sample to the closest tracked position to the SDF-interpolated actor position; columns are Staying / Walking / Running / Unknown:
 
 | Ground-truth segment | Staying | Walking | Running | Unknown |
 | :--- | ---: | ---: | ---: | ---: |
@@ -128,33 +91,71 @@ For classification, each inference sample was assigned the closest tracked posit
 | Run | 0 | 15 | 4 | 6 |
 | Walk return | 0 | 58 | 9 | 0 |
 
-Corner detections occurred in 208/210 inference samples (99.0%); two idle samples had no tracked entry. The nearest actor track ID changed five times across the run, and nine inference samples contained multiple IDs.
+Corner detections occurred in **208/210** inference samples (99.0%); two idle samples had no tracked entry. The nearest-actor track ID changed five times across the run, and nine inference samples contained multiple IDs.
 
-| Stream | Messages | Wall Hz | Sim Hz |
+| Measurement | Messages | Wall Hz | Sim Hz |
 | :--- | ---: | ---: | ---: |
 | Overhead camera input | 1390 | 11.557 | 17.145 |
 | Corner camera input | 436 | 3.624 | 5.377 |
 | Inference telemetry | 210 | 1.874 | 2.588 |
-| `/person_activity` | 100 | 0.902 | 1.335 |
+| `/person_activity` | 100 | **0.902** | **1.335** |
 | Overhead annotated JPEG | 209 | 1.872 | 2.754 |
 | Corner annotated JPEG | 210 | 1.874 | 2.590 |
 
-Both annotated topics were `jpeg`, 640x480, configured quality 75. All 100 activity messages used a valid contract string (41 Staying, 51 Walking, 8 Running). The measured average meets 1-10 Hz on simulated time; the wall-time average was 0.902 Hz at this RTF. Clarify with the app owner if the 1 Hz minimum is intended to be wall-clock rather than simulation-time.
+**The 0.902 Hz wall-clock `/person_activity` result was measured before the C1b fix.** All 100 strings were valid (41 Staying, 51 Walking, 8 Running); the annotated images were 640x480 JPEG at configured quality 75. Sampled run frames showed visible foot glide during the approximately 3.0-3.14 m/s run. This was a qualitative check; no animation or route change was made.
 
-Sampled run frames at 5 Hz show visible foot glide during the 3.0-3.14 m/s run. This was a qualitative visual check, not a measured foot-contact trajectory; actor speed or animation playback was not changed.
+## C1-C1b: Cleanup and wall-clock activity rate
 
-### Historical rate and classifier measurements
+C1 removed four saved image frames and three workspace YOLO weights; the node uses the bare `yolov8n.pt` model name, not a workspace-local weights path. Python and pytest caches were removed. The repository spelling check for the former typo returned zero hits; registration is named `Surveillance_Sim` and uses `~/.surveillance_sim.bash`.
 
-- Earlier 30 Hz overhead baseline: RTF 0.763. A temporary 15 Hz SDF copy measured RTF 0.826 (+8.3%); sim-time inference/annotated rates shifted from about 2.47 to 2.22 Hz, while wall rates stayed near 1.9 Hz. The source SDF was not changed. Confirm before any permanent camera-rate change.
-- Earlier A4 sampling replay at `max_fps=2.0`: 11/33 track updates were below three samples in a 1 s window; replaying the same observations with a 2 s window reduced this to 9/33. Speed thresholds were left unchanged. The current-route confusion table above shows that Running remains poorly recognized.
-- No GPU software was installed. PyTorch is built for CUDA 13.0 while the WSL driver reports capability 12.5; `torch.cuda.is_available()` is false. Inference uses CPU. A compatible driver/runtime and supported GPU would need to be provided before revisiting GPU inference.
+C1b added `activity_publish_hz` (default 2.0, clamped to 1.5-10.0), immediate label changes, wall-clock repeats, silence for invalid/no labels, and a 3-second inference-staleness cutoff. Five fake-wall-clock tests cover change, cadence, clamping, silence, and staleness.
 
-## 7. Known Limitations and Handoff
+The single requested headless run recorded **18.052 sim seconds / 22.501 wall seconds (RTF 0.802)**:
 
-- Overhead person detection is poor at the actor's small pixel size; fused corner detections are projected into the overhead annotation.
-- The current-route classifier confuses idle/walking and detects only 4/25 run samples as Running; tracking also fragments during run segments. Keep current thresholds and defaults pending a deliberate tuning decision.
-- The app-visible activity stream averaged 0.902 Hz wall time in the measured run, although it averaged 1.335 Hz simulated time. Decide which clock defines the minimum-rate contract.
-- Run-clip foot glide is visible at the current actor speed. The map producer and `world_to_map` calibration belong to the consuming integration; the occupancy-grid nudge assumes zero origin yaw.
-- The actor assets are external Gazebo Fuel resources, and inference is CPU-limited by the current CUDA/driver mismatch.
+| Measurement | Wall Hz | Sim Hz |
+| :--- | ---: | ---: |
+| Overhead camera input | 17.51 | 21.83 |
+| Corner camera input | 6.00 | 7.49 |
+| Inference telemetry | 1.97 | 1.92 |
+| `/person_activity` | **1.749** | **2.142** |
+| Overhead annotated JPEG | 1.943 | 2.410 |
+| Corner annotated JPEG | 1.972 | 1.932 |
 
-For another workspace, copy `src/surveillance_sim` and `src/vision_perception` as separate packages and build them together. This repository does not provide a robot launch wrapper or modify other packages.
+The run observed 28 valid activity messages and one `/goal_pose` at image stamp **10.792 s** in the idle interval. The 1.749 Hz measurement used the initial executor-timer implementation; its maximum message gap was **0.893 s**. Publishing was then moved to a dedicated wall-clock worker thread to prevent inference callback starvation. D1 later measured that final worker: the all-message wall average was **1.615 Hz**, with a **21.952 s** maximum overall gap. The active-only rate and interval could not be separated from periods with no valid classification; see D1 below. Do not treat the initial 1.749 Hz result as a measurement of the final thread.
+
+Ultralytics re-created `yolov8n.pt` in the workspace root during this run; final cleanup removed it again along with regenerated caches.
+
+The requested `ros2 topic info -v` and `ros2 topic hz` queries occurred during teardown after perception publishers had disappeared. They do not establish live perception endpoint QoS or rates. The measurements above are recorder rates; source-derived node QoS and the test-map QoS are documented in [`../INTERFACES.md`](../INTERFACES.md).
+
+## D1: Live integration verification
+
+The single D1 headless run used `bridge_clock:=true`, the transient-local test map, and the bare `ros2 run vision_perception yolo_node` command. It reached RTF **0.63265** and recorded **78,045** `/clock` callbacks, **1,627/498** overhead/corner images, **2,765/912** overhead/corner `CameraInfo` messages, **203** telemetry messages, **201/203** overhead/corner annotations, **199** activity messages, and **4** goals. These are observer counts, not rates: the short `ros2 topic hz` captures did not return stable rates for the camera, annotation, activity, or goal topics. `/clock` produced one live CLI sample of **539.3 Hz**. Do not infer zero publication from the failed rate captures.
+
+All **199** activity strings were valid (`Walking` 109, `Staying` 86, `Running` 4). The observed average between activity messages was **1.615 Hz wall-clock**; the maximum gap across all messages was **21.952 s**. The output did not retain enough per-track classification timing to determine whether that gap occurred while a valid label was continuously classified, so active-only cadence and maximum interval remain **unverified**. D1's message counts and average therefore do not prove the configured active-label interval contract.
+
+Four goals were recorded in idle segments. Their image stamps and map positions were `(11.452 s, -0.1143, -0.0715)`, `(34.882 s, -0.1096, -0.0746)`, `(61.381 s, -0.1108, -0.0726)`, and `(88.969 s, 0.8951, -0.0656)`. Each had `frame_id=map`, `z=0`, and `w=1`. The first three were near the default idle point `(0,0)`. Setting the live `world_to_map` parameter to `[1,0,0]` succeeded but did not change the already-constructed `GoalPoseManager`; editing `cameras.yaml` to `[1,0,0]` and restarting without a rebuild changed the next goal's x coordinate by about 1 m. The source YAML was restored to `[0,0,0]` after the run. Runtime parameter updates to `world_to_map` are therefore not effective for goal generation; use the YAML default at node startup.
+
+Live `ros2 topic info -v` captures reported reliable/volatile endpoints for the observed camera bridge and perception publishers; ROS CLI reported history depth as `UNKNOWN`. The first overhead raw-image query happened before its publisher was discovered, so that endpoint's QoS was not directly verified in the capture. The `/clock` publisher was reliable/volatile and the `use_sim_time` subscriber best-effort/volatile. `/surveillance_camera/image_raw/compressed` was discovered as `sensor_msgs/msg/CompressedImage` with a publisher, but no message/rate was confirmed. `compressed_image_transport` and `image_transport` were installed. Other short `ros2 topic hz` commands ended without a usable rate; their SIGTERM teardown emitted invalid-context diagnostics.
+
+The YOLO process returned from SIGINT in **3.68 s** and **2.06 s** on its two starts, within the six-second limit and without SIGKILL. Startup to the initialized log took **20.23 s**; the D1 temporary working directory contained a **6,549,796-byte** `yolov8n.pt`, but the harness did not isolate download time. Its observer reported first annotation **47.00 s** after initialization, inconsistent with the earlier goal/inference evidence; callback-queue delay made this latency unreliable. First-inference latency and download-only time are **unverified**. The harness's end-of-run process check found one `gz sim` child (PID 590); a later WSL process check found no such process, but orderly Gazebo-child cleanup was not confirmed during the run.
+
+The workspace-root `yolov8n.pt` present before D1 was preserved: it was not created by this task and the current task permits deleting only task-created temporary files. It is local and untracked; the node still passes the bare model name to Ultralytics.
+
+## Remaining limitations and open decisions
+
+- The overhead detector failed on all A2 sample frames; its actor was only about 15x16 px. Corner-derived global markers supply overhead annotations.
+- Running recognition remains weak on the H4 route, and track IDs fragmented during the run. No threshold, smoothing, or route tuning is proposed by these measurements.
+- D1 measured a 1.615 Hz wall-clock average between activity messages, but the **21.952 s** maximum overall gap cannot be classified as an active-label gap from retained data. Measure the active-only interval on a future run before claiming that the repeat requirement is empirically verified.
+- CPU RTF remained below 1.0. PyTorch was built for CUDA 13.0 while the available WSL driver capability was 12.5; `torch.cuda.is_available()` was false. No GPU software was installed. A supported driver/runtime and GPU pairing would be needed to revisit GPU inference.
+- One earlier Gazebo SIGINT teardown reported a segmentation fault after measurement output had been produced.
+- The goal free-cell rule is `cell == 0`, and map-origin yaw is assumed zero. Map production and `world_to_map` calibration belong to the consuming integration.
+- External Gazebo Fuel animation assets may require network access or a populated cache on first launch.
+- D1's camera/annotation/activity/goal `ros2 topic hz` captures were inconclusive; the observer retained counts but not reliable per-topic timing for those feeds. The image-compress republisher's output type was discovered, but its messages and rate were not.
+
+## Verification history
+
+| Checkpoint | Build | Tests |
+| :--- | :--- | :--- |
+| C1 cleanup | `colcon build --symlink-install` passed | `pytest -q`: 68 passed |
+| C1b activity publisher | `colcon build --symlink-install` passed | Focused activity tests: 5 passed; full `pytest -q`: 78 passed |
+| D1 live verification | `colcon build --symlink-install` passed | `pytest -q`: 78 passed |

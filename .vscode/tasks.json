@@ -306,7 +306,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Survellence_Sim: Register with ROS 2 (run once)",
+      "label": "Surveillance_Sim: Register with ROS 2 (run once)",
       "type": "shell",
       "command": "bash",
       "args": [

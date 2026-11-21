@@ -25,10 +25,10 @@ esac
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 workspace_root="$(cd -- "$script_dir/.." && pwd -P)"
 bashrc="$HOME/.bashrc"
-registration_file="$HOME/.survellence_sim.bash"
-backup_file="$HOME/.bashrc.survellence_sim.bak"
-start_marker="# >>> Survellence_Sim >>>"
-end_marker="# <<< Survellence_Sim <<<"
+registration_file="$HOME/.surveillance_sim.bash"
+backup_file="$HOME/.bashrc.surveillance_sim.bak"
+start_marker="# >>> Surveillance_Sim >>>"
+end_marker="# <<< Surveillance_Sim <<<"
 
 rewrite_bashrc() {
     local action="$1"
@@ -41,7 +41,7 @@ rewrite_bashrc() {
         return 0
     fi
 
-    temporary="$(mktemp "$HOME/.bashrc.survellence_sim.XXXXXX")"
+    temporary="$(mktemp "$HOME/.bashrc.surveillance_sim.XXXXXX")"
     if ! python3 - "$bashrc" "$temporary" "$action" "$start_marker" "$end_marker" <<'PY'
 import sys
 from pathlib import Path
@@ -74,7 +74,7 @@ for line in lines:
         kept.append(line)
 
 if inside or starts != ends:
-    raise SystemExit("incomplete Survellence_Sim marker block in ~/.bashrc")
+    raise SystemExit("incomplete Surveillance_Sim marker block in ~/.bashrc")
 
 result = b"".join(kept)
 if action == "install":
@@ -84,7 +84,7 @@ if action == "install":
     block = newline.join(
         (
             start,
-            b"source ~/.survellence_sim.bash",
+            b"source ~/.surveillance_sim.bash",
             end,
             b"",
         )
@@ -95,7 +95,7 @@ Path(output_path).write_bytes(result)
 PY
     then
         rm -f "$temporary"
-        fail "could not safely update the Survellence_Sim block in ~/.bashrc"
+        fail "could not safely update the Surveillance_Sim block in ~/.bashrc"
     fi
     mv "$temporary" "$bashrc"
 }
@@ -103,7 +103,7 @@ PY
 if [[ "$mode" == "remove" ]]; then
     rewrite_bashrc remove
     rm -f "$registration_file"
-    printf 'Removed the Survellence_Sim registration from ~/.bashrc and deleted ~/.survellence_sim.bash.\n'
+    printf 'Removed the Surveillance_Sim registration from ~/.bashrc and deleted ~/.surveillance_sim.bash.\n'
     exit 0
 fi
 
@@ -133,12 +133,12 @@ ros2 launch surveillance_sim surveillance_world.launch.py --show-args >/dev/null
 
 printf '%s\n' \
     '# Registered by scripts/register_with_ros.sh' \
-    'case $- in *u*) _survellence_sim_restore_nounset=1; set +u ;; *) _survellence_sim_restore_nounset=0 ;; esac' \
+    'case $- in *u*) _surveillance_sim_restore_nounset=1; set +u ;; *) _surveillance_sim_restore_nounset=0 ;; esac' \
     'source /opt/ros/jazzy/setup.bash' > "$registration_file.tmp"
 printf 'source %q\n' "$install_setup" >> "$registration_file.tmp"
 printf '%s\n' \
-    'if [[ $_survellence_sim_restore_nounset -eq 1 ]]; then set -u; fi' \
-    'unset _survellence_sim_restore_nounset' >> "$registration_file.tmp"
+    'if [[ $_surveillance_sim_restore_nounset -eq 1 ]]; then set -u; fi' \
+    'unset _surveillance_sim_restore_nounset' >> "$registration_file.tmp"
 chmod 600 "$registration_file.tmp"
 mv "$registration_file.tmp" "$registration_file"
 
@@ -153,7 +153,7 @@ rewrite_bashrc install
 if ! verification="$(
     bash -c '
         set -eo pipefail
-        source ~/.survellence_sim.bash
+        source ~/.surveillance_sim.bash
         set -u
         ros2 pkg prefix surveillance_sim
         ros2 pkg prefix vision_perception
